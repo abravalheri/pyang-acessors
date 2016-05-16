@@ -1,5 +1,5 @@
 -   repo: git://github.com/pre-commit/pre-commit-hooks
-    sha: v0.4.2
+    sha: master
     hooks:
     -   id: trailing-whitespace
     -   id: check-ast
@@ -11,10 +11,12 @@
     -   id: end-of-file-fixer
     -   id: requirements-txt-fixer
     -   id: flake8
-        args: ["--exclude=docs/conf.py"]
-
+        args:
+        - --exclude=docs/conf.py
 -   repo: git://github.com/FalconSocial/pre-commit-python-sorter
-    sha: 1.0.1
+    sha: master
     hooks:
     -   id: python-import-sorter
-        args: ['--silent-overwrite']
+        args:
+        - --check-only
+        - --diff
