@@ -1,9 +1,9 @@
 ===================
-pyang-accessors-rpc
+pyang-accessors
 ===================
 
 
-Add a short description here!
+Generates accessors (set/get RPC operations) for each structure field.
 
 
 Description

@@ -1,7 +1,7 @@
 # .coveragerc to control coverage.py
 [run]
 branch = True
-source = pyang_accessors_rpc
+source = pyang_accessors
 # omit = bad_file.py
 
 [report]

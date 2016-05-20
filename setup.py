@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-    Setup file for pyang_accessors_rpc.
+    Setup file for pyang_accessors.
 
     This file was generated with PyScaffold 2.5.4, a tool that easily
     puts up a scaffold for your new Python project. Learn more under:
