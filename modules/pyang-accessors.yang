@@ -1,0 +1,54 @@
+module pyang-accessors {
+  namespace "http://cpqd.com.br/ns/generators/pyang-accessors";
+  prefix "accessor";
+
+  organization "Brazilian Center for Research and Development (CPqD)";
+
+  contact
+    "Research and Development Division (VPPD)
+     Editor:   Anderson Bravalheri <abraval@cpqd.com.br>
+     Copyright (c) 2016 CPqD and the persons identified as
+     authors of the code.  All rights reserved.";
+
+  description
+    "Extensions for pyang-accessors generator";
+
+  revision 2015-05-20 { description "Initial version"; }
+
+  extension modifier {
+    description
+      "Change the default behavior of `pyang-accessors` (just produce
+       accessors for leafs and leaf-lists elements).
+
+       Allowed arguments for this extension:
+
+       atomic: consider list or container as an indivisible entity.
+               `set`/`get` operations will replace/retrieve the entire
+               entity at once.
+
+       atomic-item: similar to `atomic`, but consider each item of a list
+                    an indivisible entity instead of the entire list.
+                    Two extra operations are added for non-read-only
+                    items: `add` and `remove`.
+                    The `add` operation should receive a single entity
+                    (list item), while the `remove` operation will return one.
+                    Default behavior for leaf-lists.
+
+       include: add accessor to replace/retrieve the entire leaf-list,
+                list or container container, but allow parts to be accessed
+                individually.
+
+       include-item: similar to `include`, but consider each item of a list
+                     an entity instead of the entire list. Also adds `add`
+                     and `remove` operations.";
+
+       argument modifier-type;
+  }
+
+  extension item-name {
+    description
+      "Name for an item of a list.
+       The default behavior is assume the singularized list name.";
+    argument value;
+  }
+}

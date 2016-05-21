@@ -4,12 +4,7 @@
 """
 Tests for YANG modules without complex structures, just simple leafs
 """
-
-from os.path import join
-
 import pytest
-
-from pyangext.syntax_tree import find
 
 __author__ = "Anderson Bravalheri"
 __copyright__ = "andersonbravalheri@gmail.com"
@@ -34,6 +29,14 @@ def plain_example(ctx, parse):
                 description "Initial revision.";
             }
 
+            typedef state-type {
+                type enumeration {
+                    enum "off";
+                    enum "active";
+                    enum "idle";
+                }
+            }
+
             leaf host-name {
                 type string;
                 description "Hostname for this system";
@@ -44,12 +47,17 @@ def plain_example(ctx, parse):
             }
 
             leaf state {
-                type enumeration {
-                    enum "off";
-                    enum "active";
-                    enum "idle";
-                }
+                type state-type;
                 config false;
+            }
+
+            leaf-list admins {
+                type string;
+                config false;
+            }
+
+            leaf-list users {
+                type string;
             }
         }
         """
@@ -66,42 +74,92 @@ def rpc_module(generator, plain_example):
     return generator.transform(plain_example)
 
 
-def test_generate_accessors(rpc_module):
+def test_generate_get_accessors(rpc_module):
     """
-    the generated module should not have get accessors if leaf
-        has no parameter
-    The generated module should not have ``set`` accessors for
-        ``config false`` leafs
-    The generated module should have ``set`` accessors for leafs
-        without ``config false``
+    all entry-points should have READ accessors
+    If the entry-point has no key, its request will not have parameters
+    """
+    for leaf_name in ('host-name', 'type', 'state'):
+        rpc = rpc_module.find('rpc', 'get-'+leaf_name)[0]
+        assert rpc
+        assert not rpc.find('input')
+
+
+def test_consider_leaf_list_atomic_item(rpc_module):
+    """
+    leaf-lists should be considered atomic-item
+    """
+    # entry point receives name in singular
+    for leaf_name in ('admin', 'user'):
+        rpc = rpc_module.find('rpc', 'get-'+leaf_name)[0]
+        assert rpc
+        # get needs an ID to find the correct entry
+        input_ = rpc.find('input')[0]
+        assert input_.find('uses', leaf_name+'-id')
+
+
+def test_generate_failure_condition(rpc_module):
+    """
+    all rpc outputs should have a response choice whith a failure case
+    the failure case should have a ``uses failure`` statement
+    """
+    for rpc in rpc_module.find('rpc'):
+        choice = rpc.find('output')[0].find('choice', 'response')[0]
+        case = choice.find('case', 'failure')[0]
+        assert case.find('uses', 'failure')
+
+
+def test_not_generate_set_for_config_false(rpc_module):
+    """
+    should not generate set accessors for ``config false`` nodes
+    """
+    for rpc_name in ('set-state', 'set-admin'):
+        assert not rpc_module.find('rpc', rpc_name)
+
+
+def test_generate_set_for_config_not_false(rpc_module):
+    """
+    should generate set accessors for leafs without ``config false``
     """
     print rpc_module.dump()
-    for leaf_name in ('host-name', 'type', 'state'):
-        assert not rpc_module.find('rpc', 'get-'+leaf_name)
-        assert not rpc_module.find('grouping', 'get-'+leaf_name+'-request')
-        assert not rpc_module.find('grouping', 'get-'+leaf_name+'-response')
-
-    assert not rpc_module.find('rpc', 'set-state')
-    assert not rpc_module.find('grouping', 'set-state-request')
-    assert not rpc_module.find('grouping', 'set-state-response')
-
-    for leaf_name in ('host-name', 'type'):
-        assert rpc_module.find('rpc', 'set-'+leaf_name)
-        assert rpc_module.find('grouping', 'set-'+leaf_name+'-request')
-        assert rpc_module.find('grouping', 'set-'+leaf_name+'-response')
+    for rpc_name in ('set-type', 'set-host-name', 'set-user'):
+        assert rpc_module.find('rpc', rpc_name)
 
 
-def test_leaf_definition_inside_groups(rpc_module):
+def test_generate_add_remove_for_lists_config_not_false(rpc_module):
     """
-    each request/response grouping should have the leaf definition
-       and an ``error`` field
+    should generate set accessors for leafs without ``config false``
     """
-    for grouping in rpc_module.find('grouping'):
-        parts = grouping.unwrap().arg.split('-')
-        accessor = parts[0]
-        leaf_name = '-'.join(parts[1:-1])
-        moment = parts[-1]
-        if accessor not in ('set', 'add'):
-            assert grouping.find('leaf', leaf_name)
-        if moment == 'response':
-            assert grouping.find(arg='error')
+    print rpc_module.dump()
+    for rpc_name in ('add-user', 'remove-user'):
+        assert rpc_module.find('rpc', rpc_name)
+
+
+def test_not_generate_add_remove_for_lists_config_false(rpc_module):
+    """
+    should generate set accessors for leafs without ``config false``
+    """
+    for rpc_name in ('add-admin', 'remove-admin'):
+        assert not rpc_module.find('rpc', rpc_name)
+
+
+@pytest.mark.skip(reason="TODO: not implemented yet")
+def test_typedef_reference(rpc_module):
+    """
+    should not include typedef
+    should referece typedef, using as prefix, the desired prefix in
+        original module
+    """
+    print rpc_module.dump()
+    yang = rpc_module.dump()
+    assert 'typedef state-type' not in yang
+    assert 'type acme:state-type;' in yang
+
+
+def test_valid_yang(rpc_module):
+    """
+    module produced by transformation should be valid
+    """
+    assert rpc_module.validate()
+    assert hasattr(rpc_module, 'i_children')
+    assert rpc_module.i_children

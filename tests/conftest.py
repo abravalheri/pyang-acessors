@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# pylint: disable=redefined-outer-name
 """
     Dummy conftest.py for pyang_accessors.
 
@@ -7,7 +8,7 @@
     Read more about conftest.py under:
     https://pytest.org/latest/plugins.html
 """
-from __future__ import print_function, absolute_import, division
+from __future__ import absolute_import, division, print_function
 
 import pytest
 
@@ -15,7 +16,6 @@ from pyang.yang_parser import YangParser
 from pyangext.utils import create_context
 
 from pyang_accessors.generators import RPCGenerator
-
 
 
 @pytest.fixture(scope='session')
@@ -34,6 +34,7 @@ def ctx(module_dir):
 def generator(ctx):
     """Pre-instantiated Accessor Generator"""
     return RPCGenerator(ctx)
+
 
 @pytest.fixture
 def parse(ctx):
