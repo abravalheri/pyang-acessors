@@ -126,7 +126,7 @@ class DataScanner(object):
         new_keys = []
         for key in keys:
             new_key = key.copy()
-            new_key.arg = self.name_composer(prefix, key.arg)
+            new_key.arg = self.name_composer([prefix, key.arg])
 
         return new_keys
 
