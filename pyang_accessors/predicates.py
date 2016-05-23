@@ -63,7 +63,10 @@ def is_top_level(statement):
 
 
 def is_extension(statement):
-    return statement.keyword not in YANG_KEYWORDS
+    return (
+        statement.keyword != '_comment' and
+        statement.keyword not in YANG_KEYWORDS
+    )
 
 
 def is_custom_type(statement):
@@ -75,8 +78,8 @@ def is_custom_type(statement):
 
 def has_prefixed_arg(statement):
     return (
-        statement.keyword != 'namespace' and
+        statement.keyword not in ('namespace', 'description', '_comment') and
         statement.arg and
-        PREFIX_SEPARATOR in statement.arg and
-        URL_SEPARATOR not in statement.arg
+        not any(char in statement.arg for char in ' "\',.;/\\') and
+        PREFIX_SEPARATOR in statement.arg
     )

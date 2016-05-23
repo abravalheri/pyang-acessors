@@ -224,8 +224,8 @@ class RPCGenerator(object):
                 continue
             out.append(node.copy(out_raw))
 
-        # desc = out.description(self.description_template.format(module.arg))
-        # desc.comment(self.warning_banner)
+        desc = out.description(self.description_template.format(module.arg))
+        desc.comment(self.warning_banner)
 
         return (out, builder)
 

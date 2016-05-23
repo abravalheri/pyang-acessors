@@ -7,7 +7,7 @@ import re
 
 from pyang import plugin
 
-from ..generators import RPCGenerator
+from pyang_accessors.generators import RPCGenerator
 
 __author__ = "Anderson Bravalheri"
 __copyright__ = "andersonbravalheri@gmail.com"
