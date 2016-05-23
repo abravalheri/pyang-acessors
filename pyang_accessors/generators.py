@@ -35,9 +35,15 @@ class RPCGenerator(object):
         'id_suffix': 'id',
         'data_suffix': 'data',
         'data_and_id_suffix': 'full-data',
+        'response_suffix': 'response',
         'suffix': 'interface',
         'choice_name': 'response',
         'success_name': 'success',
+        'success_children_template': [
+            ('leaf', 'ok', [
+                ('type', 'boolean')
+            ])
+        ],
         'failure_name': 'failure',
         'failure_children_template': [
             ('leaf', 'error-code', [
@@ -127,10 +133,12 @@ class RPCGenerator(object):
     def create_response_choice(self, parent, success_children=None):
         choice = parent.choice(self.choice_name)
 
+        choice.default(self.success_name)
+        case = choice.case(self.success_name)
         if success_children:
-            choice.default(self.success_name)
-            case = choice.case(self.success_name)
             case.append(*success_children)
+        else:
+            case.uses(self.success_name)
 
         failure = choice.case(self.failure_name)
         failure.uses(self.failure_name)
@@ -157,41 +165,51 @@ class RPCGenerator(object):
             self.failure_name, self.failure_children_template, parent=out
         )
         out.append(failure)
-        print list(scanner.scan(module))
+        success = builder.grouping(
+            self.success_name, self.success_children_template, parent=out
+        )
+        out.append(success)
+
+        compose = self.name_composer
 
         for entry in scanner.scan(module):
             # id group is just present if keys are not empty
             id_group = None
             keys = entry.parent_keys + entry.own_keys
             if keys:
-                id_group = self.name_composer(
-                    entry.path + [self.id_suffix])
-                print '# - keys', keys
+                id_group = compose(entry.path + [self.id_suffix])
                 out.grouping(id_group).append(*keys)
 
             # data grouping is always present because READ is always present
-            data_group = self.name_composer(entry.path + [self.data_suffix])
+            data_group = compose(entry.path + [self.data_suffix])
             out.grouping(data_group, entry.payload)
 
             data_and_id_group = None
             if entry.parent_keys:
-                data_and_id_group = self.name_composer(
+                data_and_id_group = compose(
                     entry.path + [self.data_and_id_suffix])
                 group = out.grouping(
                     data_and_id_group, entry.parent_keys)
                 group.uses(data_group)
 
+            taken = []
             for operation in entry.operations:
                 # --- OPERATIONS ---
-                rpc = out.rpc(self.name_composer([operation] + entry.path))
+                rpc_name = compose([operation] + entry.path)
+                rpc = out.rpc(rpc_name)
                 if any(op == operation for op in (READ_OP, ITEM_REMOVE_OP)):
                     # READ/REMOVE request may specify parent + own keys
                     # (id_group).
                     if id_group:
                         rpc.input().uses(id_group)
                     # Responds with data
-                    self.create_response_choice(
-                        rpc.output(), [builder.uses(data_group)])
+                    response_name = compose(entry.path + [self.response_suffix])
+                    # -- avoid duplicating groupings for READ and REMOVE
+                    if response_name not in taken:
+                        response_group = out.grouping(response_name)
+                        self.create_response_choice(
+                            response_group, [builder.uses(data_group)])
+                        taken.append(response_name)
                 else:  # CHANGE_OP, ITEM_ADD_OP
                     # CHANGE/ADD request may specify parent + own keys and
                     # must specify data.
@@ -199,19 +217,24 @@ class RPCGenerator(object):
                     rpc.input().uses(
                         (data_and_id_group if data_and_id_group else data_group)
                     )
+                    response_name = compose([rpc_name, self.response_suffix])
+                    response_group = out.grouping(response_name)
 
                 if operation == CHANGE_OP:
                     # CHANGE request does not respond anything
                     # (except occasional error)
-                    self.create_response_choice(rpc.output())
+                    self.create_response_choice(response_group)
                 elif operation == ITEM_ADD_OP:
                     # ADD request responds with own keys
                     id_group_is_own_key = (
                         len(keys) == 1 and keys[0] == entry.own_keys[0])
                     self.create_response_choice(
-                        rpc.output(),
+                        response_group,
                         [builder.uses(id_group)] if id_group_is_own_key
                         else entry.own_keys
                     )
 
+                rpc.output().uses(response_name)
+
+        out.validate(rescue=True)
         return out

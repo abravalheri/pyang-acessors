@@ -6,7 +6,7 @@ Tests for YANG modules without complex structures, just simple leafs
 """
 import pytest
 
-from pyangext.utils import parse
+from pyangext.utils import dump, parse
 
 __author__ = "Anderson Bravalheri"
 __copyright__ = "andersonbravalheri@gmail.com"
@@ -107,8 +107,14 @@ def test_generate_failure_condition(rpc_module):
     the failure case should have a ``uses failure`` statement
     """
     for rpc in rpc_module.find('rpc'):
-        choice = rpc.find('output').find('choice', 'response')
-        assert choice.find('case', 'failure').find('uses', 'failure')
+        print rpc.dump()
+        print '\n'.join([dump(x) for x in rpc.unwrap().i_children])
+        choice = rpc.walk(
+            lambda x: x.keyword == 'choice' and x.arg == 'response',
+            key='i_children')
+        assert choice
+        assert choice.walk(
+            lambda x: x.keyword == 'uses' and x.arg == 'failure')
 
 
 def test_not_generate_set_for_config_false(rpc_module):
