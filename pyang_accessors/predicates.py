@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
 """Functions for qualifying nodes."""
 
-from pyangext.definitions import DATA_STATEMENTS
+from pyangext.definitions import (
+    BUILT_IN_TYPES,
+    DATA_STATEMENTS,
+    PREFIX_SEPARATOR,
+    URL_SEPARATOR,
+    YANG_KEYWORDS
+)
 from pyangext.utils import find
 
 from .definitions import (
@@ -9,7 +15,7 @@ from .definitions import (
     ATOMIC_ITEM,
     INCLUDE,
     INCLUDE_ITEM,
-    MODIFIER_EXT,
+    MODIFIER_EXT
 )
 
 __author__ = "Anderson Bravalheri"
@@ -54,3 +60,23 @@ def is_read_only(statement):
 
 def is_top_level(statement):
     return statement.keyword in ('module', 'submodule')
+
+
+def is_extension(statement):
+    return statement.keyword not in YANG_KEYWORDS
+
+
+def is_custom_type(statement):
+    return (
+        statement.keyword == 'type' and
+        statement.arg not in BUILT_IN_TYPES
+    )
+
+
+def has_prefixed_arg(statement):
+    return (
+        statement.keyword != 'namespace' and
+        statement.arg and
+        PREFIX_SEPARATOR in statement.arg and
+        URL_SEPARATOR not in statement.arg
+    )

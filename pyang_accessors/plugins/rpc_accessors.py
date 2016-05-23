@@ -2,13 +2,12 @@
 # -*- coding: utf-8 -*-
 """
 """
-import re
 import optparse
+import re
 
 from pyang import plugin
 
-from pyang_accessors import __version__
-from pyang_accessors.generators import RPCGenerator
+from ..generators import RPCGenerator
 
 __author__ = "Anderson Bravalheri"
 __copyright__ = "andersonbravalheri@gmail.com"
@@ -79,4 +78,4 @@ class RPCAccessorsPlugin(plugin.PyangPlugin):
         generator = RPCGenerator(ctx, suffix=suffix)
         out = generator.transform(modules[0], **generator_options)
 
-        out.dump(fp)
+        out.dump(fp, ctx=ctx)

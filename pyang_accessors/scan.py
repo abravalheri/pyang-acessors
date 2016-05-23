@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 """
 """
-from collections import namedtuple
 from itertools import chain as concat
 
 from inflection import singularize
 
-from pyangext.utils import find, select
 from pyang_builder import StatementWrapper
+from pyangext.utils import find, select
 
 from .definitions import (  # constants and identifiers
     CHANGE_OP,
     ITEM_ADD_OP,
     ITEM_REMOVE_OP,
-    READ_OP,
+    READ_OP
 )
 from .predicates import (
     is_atomic,
@@ -23,7 +22,7 @@ from .predicates import (
     is_included_item,
     is_list,
     is_read_only,
-    is_top_level,
+    is_top_level
 )
 
 # create a uniq object for comparisson
@@ -35,8 +34,8 @@ DEFAULT_ITEM_OPS = DEFAULT_OPS + [ITEM_ADD_OP, ITEM_REMOVE_OP]
 
 
 def ensure_validated(statement):
-    if not (hasattr(statement, 'i_is_validated')
-            and statement.i_is_validated):
+    if not (hasattr(statement, 'i_is_validated') and
+            statement.i_is_validated):
         raise AttributeError(
             'Invalid module %s. Was the module validated?', statement.arg)
 

@@ -5,7 +5,9 @@ try:
 except:
     __version__ = 'unknown'
 
+from .exceptions import YangImportError
 from .generators import RPCGenerator
+from .registry import ImportRegistry
 from .scan import Scanner
 
-__all__ = ['RPCGenerator', 'Scanner']
+__all__ = ['RPCGenerator', 'ImportRegistry', 'Scanner', 'YangImportError']

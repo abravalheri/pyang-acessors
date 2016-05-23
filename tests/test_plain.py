@@ -4,9 +4,11 @@
 """
 Tests for YANG modules without complex structures, just simple leafs
 """
+from os.path import join
+
 import pytest
 
-from pyangext.utils import dump, parse
+from pyangext.utils import parse
 
 __author__ = "Anderson Bravalheri"
 __copyright__ = "andersonbravalheri@gmail.com"
@@ -14,10 +16,9 @@ __license__ = "mozilla"
 
 
 @pytest.fixture()
-def plain_example(ctx):
+def plain_example(ctx, module_dir):
     """Plain YANG example, just with leafs, no nested structures"""
-    module = parse(
-        """
+    text = """
         module plain-example {
             namespace "http://acme.example.com/system";
             prefix "acme";
@@ -62,9 +63,11 @@ def plain_example(ctx):
                 type string;
             }
         }
-        """,
-        ctx
-    )
+        """
+    with open(join(module_dir, 'plain-example.yang'), 'w') as fp:
+        fp.write(text)
+
+    module = parse(text, ctx)
     ctx.add_parsed_module(module)
 
     return module
@@ -107,8 +110,6 @@ def test_generate_failure_condition(rpc_module):
     the failure case should have a ``uses failure`` statement
     """
     for rpc in rpc_module.find('rpc'):
-        print rpc.dump()
-        print '\n'.join([dump(x) for x in rpc.unwrap().i_children])
         choice = rpc.walk(
             lambda x: x.keyword == 'choice' and x.arg == 'response',
             key='i_children')
@@ -149,22 +150,21 @@ def test_not_generate_add_remove_for_lists_config_false(rpc_module):
         assert not rpc_module.find('rpc', rpc_name)
 
 
-@pytest.mark.skip(reason="TODO: not implemented yet")
-def test_typedef_reference(rpc_module):
+def test_typedef_reference(rpc_module, ctx):
     """
     should not include typedef
     should referece typedef, using as prefix, the desired prefix in
         original module
     """
-    yang = rpc_module.dump()
+    yang = rpc_module.dump(ctx=ctx)
     assert 'typedef state-type' not in yang
     assert 'type acme:state-type;' in yang
 
 
-def test_valid_yang(rpc_module):
+def test_valid_yang(rpc_module, ctx):
     """
     module produced by transformation should be valid
     """
-    assert rpc_module.validate()
+    assert rpc_module.validate(ctx)
     assert hasattr(rpc_module, 'i_children')
     assert rpc_module.i_children

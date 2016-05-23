@@ -3,5 +3,5 @@
 # scipy>=0.9
 inflection
 pyang
-pyangext
 pyang-builder
+pyangext
