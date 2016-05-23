@@ -2,10 +2,9 @@
 """Functions for qualifying nodes."""
 
 from pyangext.definitions import DATA_STATEMENTS
-from pyangext.syntax_tree import find
+from pyangext.utils import find
 
-from pyang_accessors import __version__  # noqa
-from pyang_accessors.definitions import (
+from .definitions import (
     ATOMIC,
     ATOMIC_ITEM,
     INCLUDE,

@@ -4,17 +4,16 @@
 from inflection import dasherize
 
 from pyangext.definitions import HEADER_STATEMENTS
-from pyangext.syntax_tree import YangBuilder
 from pyangext.utils import create_context
+from pyang_builder import Builder
 
-from pyang_accessors import __version__  # noqa
-from pyang_accessors.definitions import (
+from .definitions import (
     CHANGE_OP,
     ITEM_ADD_OP,
     ITEM_REMOVE_OP,
     READ_OP,
 )
-from pyang_accessors.scan import DataScanner
+from .scan import Scanner
 
 __author__ = "Anderson Bravalheri"
 __copyright__ = "andersonbravalheri@gmail.com"
@@ -105,11 +104,9 @@ class RPCGenerator(object):
         name = self.create_name(module, name)
         prefix = self.create_prefix(module, prefix)
         namespace = self.create_namespace(module, namespace)
-        # create an output module
-        builder = YangBuilder(name, keyword=keyword)
 
         # create an output module
-        builder = YangBuilder(name, keyword=keyword)
+        builder = Builder(name, keyword=keyword)
         out = builder(keyword, name)
         out_raw = out.unwrap()
         out.namespace(namespace)
@@ -122,9 +119,8 @@ class RPCGenerator(object):
                 continue
             out.append(node.copy(out_raw))
 
-        desc = out.description(self.description_template.format(module.arg))
-
-        desc.comment(self.warning_banner)
+        # desc = out.description(self.description_template.format(module.arg))
+        # desc.comment(self.warning_banner)
 
         return (out, builder)
 
@@ -148,7 +144,7 @@ class RPCGenerator(object):
         (out, builder) = self.create_module_with_header(module, name, prefix,
                                                         namespace, keyword)
 
-        scanner = DataScanner(
+        scanner = Scanner(
             builder, self.key_template, self.name_composer, self.value_arg)
 
         entries = scanner.scan(module)
@@ -157,9 +153,8 @@ class RPCGenerator(object):
 
         # all response messages should have optional failure nodes
         # these nodes is determined by `failure_children_template` option
-        failure = builder.from_tuple(
-            ('grouping', self.failure_name, self.failure_children_template),
-            parent=out
+        failure = builder.grouping(
+            self.failure_name, self.failure_children_template, parent=out
         )
         out.append(failure)
         print list(scanner.scan(module))

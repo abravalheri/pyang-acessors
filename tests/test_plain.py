@@ -6,13 +6,15 @@ Tests for YANG modules without complex structures, just simple leafs
 """
 import pytest
 
+from pyangext.utils import parse
+
 __author__ = "Anderson Bravalheri"
 __copyright__ = "andersonbravalheri@gmail.com"
 __license__ = "mozilla"
 
 
 @pytest.fixture()
-def plain_example(ctx, parse):
+def plain_example(ctx):
     """Plain YANG example, just with leafs, no nested structures"""
     module = parse(
         """
@@ -60,7 +62,8 @@ def plain_example(ctx, parse):
                 type string;
             }
         }
-        """
+        """,
+        ctx
     )
     ctx.add_parsed_module(module)
 
@@ -80,7 +83,7 @@ def test_generate_get_accessors(rpc_module):
     If the entry-point has no key, its request will not have parameters
     """
     for leaf_name in ('host-name', 'type', 'state'):
-        rpc = rpc_module.find('rpc', 'get-'+leaf_name)[0]
+        rpc = rpc_module.find('rpc', 'get-'+leaf_name)
         assert rpc
         assert not rpc.find('input')
 
@@ -91,7 +94,7 @@ def test_consider_leaf_list_atomic_item(rpc_module):
     """
     # entry point receives name in singular
     for leaf_name in ('admin', 'user'):
-        rpc = rpc_module.find('rpc', 'get-'+leaf_name)[0]
+        rpc = rpc_module.find('rpc', 'get-'+leaf_name)
         assert rpc
         # get needs an ID to find the correct entry
         input_ = rpc.find('input')[0]
@@ -104,9 +107,8 @@ def test_generate_failure_condition(rpc_module):
     the failure case should have a ``uses failure`` statement
     """
     for rpc in rpc_module.find('rpc'):
-        choice = rpc.find('output')[0].find('choice', 'response')[0]
-        case = choice.find('case', 'failure')[0]
-        assert case.find('uses', 'failure')
+        choice = rpc.find('output').find('choice', 'response')
+        assert choice.find('case', 'failure').find('uses', 'failure')
 
 
 def test_not_generate_set_for_config_false(rpc_module):
@@ -121,7 +123,6 @@ def test_generate_set_for_config_not_false(rpc_module):
     """
     should generate set accessors for leafs without ``config false``
     """
-    print rpc_module.dump()
     for rpc_name in ('set-type', 'set-host-name', 'set-user'):
         assert rpc_module.find('rpc', rpc_name)
 
@@ -130,7 +131,6 @@ def test_generate_add_remove_for_lists_config_not_false(rpc_module):
     """
     should generate set accessors for leafs without ``config false``
     """
-    print rpc_module.dump()
     for rpc_name in ('add-user', 'remove-user'):
         assert rpc_module.find('rpc', rpc_name)
 
@@ -150,7 +150,6 @@ def test_typedef_reference(rpc_module):
     should referece typedef, using as prefix, the desired prefix in
         original module
     """
-    print rpc_module.dump()
     yang = rpc_module.dump()
     assert 'typedef state-type' not in yang
     assert 'type acme:state-type;' in yang

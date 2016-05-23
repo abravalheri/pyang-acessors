@@ -12,7 +12,6 @@ from __future__ import absolute_import, division, print_function
 
 import pytest
 
-from pyang.yang_parser import YangParser
 from pyangext.utils import create_context
 
 from pyang_accessors.generators import RPCGenerator
@@ -34,14 +33,3 @@ def ctx(module_dir):
 def generator(ctx):
     """Pre-instantiated Accessor Generator"""
     return RPCGenerator(ctx)
-
-
-@pytest.fixture
-def parse(ctx):
-    """YANG Parser with no overhead"""
-    parser = YangParser()
-
-    def _parse(text):
-        return parser.parse(ctx, 'pytest-test', text)
-
-    return _parse

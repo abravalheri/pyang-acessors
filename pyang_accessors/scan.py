@@ -6,16 +6,16 @@ from itertools import chain as concat
 
 from inflection import singularize
 
-from pyangext.syntax_tree import StatementWrapper, find, select, dump
+from pyangext.utils import find, select
+from pyang_builder import StatementWrapper
 
-from pyang_accessors import __version__  # noqa
-from pyang_accessors.definitions import (  # constants and identifiers
+from .definitions import (  # constants and identifiers
     CHANGE_OP,
     ITEM_ADD_OP,
     ITEM_REMOVE_OP,
     READ_OP,
 )
-from pyang_accessors.predicates import (
+from .predicates import (
     is_atomic,
     is_atomic_item,
     is_data,
@@ -111,7 +111,7 @@ class EntryPoint(object):
             self.own_keys[:])
 
 
-class DataScanner(object):
+class Scanner(object):
     def __init__(self, builder, key_template,
                  name_composer, value_arg='value'):
         self.key_template = key_template
@@ -138,7 +138,7 @@ class DataScanner(object):
             item_node.keyword = 'container'
             item_node.raw_keyword = 'container'
             item_node.arg = item_name
-            item_node = StatementWrapper(item_node, self.builder)
+            item_node = self.builder(item_node)
         else:  # leaf-list
             # singularize node:
             #   leaf-list => container with "leaf value" inside
