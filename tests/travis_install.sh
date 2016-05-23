@@ -21,7 +21,7 @@ if [[ "$DISTRIB" == "conda" ]]; then
         -O miniconda.sh
     chmod +x miniconda.sh && ./miniconda.sh -b -p $HOME/miniconda
     export PATH=$HOME/miniconda/bin:$PATH
-    conda update --yes conda
+    conda update --yes conda setuptools pip
 
     # Configure the conda environment and put it in the path using the
     # provided versions
@@ -30,6 +30,9 @@ if [[ "$DISTRIB" == "conda" ]]; then
 
 elif [[ "$DISTRIB" == "ubuntu" ]]; then
     # Use standard ubuntu packages in their default version
+    pip install -U setuptools pip virtualenv
+    virtualenv ~/testenv
+    source ~/testenv/bin/activate
 fi
 
 if [[ "$COVERAGE" == "true" ]]; then

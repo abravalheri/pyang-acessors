@@ -19,10 +19,13 @@ addons:
       - python-pip
 install:
   - source tests/travis_install.sh
+  # force pyang version with patches
+  - pip install -U -I git+https://github.com/abravalheri/pyang.git@deploy
+  - pip install -U -I git+https://github.com/abravalheri/pyangext.git@master
+  - pip install -U -I git+https://github.com/abravalheri/pyang-builder.git@master
   - pip install -r requirements.txt
-before_script:
-  - git config --global user.email "you@example.com"
-  - git config --global user.name "Your Name"
+  - pip install -r test-requirements.txt
+  - pip freeze
 script:
   - python setup.py test
 after_success:
