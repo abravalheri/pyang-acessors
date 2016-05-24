@@ -101,12 +101,12 @@ def test_consider_leaf_list_atomic_item(rpc_module):
         assert rpc
         # get needs an ID to find the correct entry
         input_ = rpc.find('input')[0]
-        assert input_.find('uses', leaf_name+'-id')
+        assert input_.find('uses', leaf_name+'-identification')
 
 
 def test_generate_failure_condition(rpc_module):
     """
-    all rpc outputs should have a response choice whith a failure case
+    all RPC outputs should have a response choice with a failure case
     the failure case should have a ``uses failure`` statement
     """
     for rpc in rpc_module.find('rpc'):
@@ -153,7 +153,7 @@ def test_not_generate_add_remove_for_lists_config_false(rpc_module):
 def test_typedef_reference(rpc_module, ctx):
     """
     should not include typedef
-    should referece typedef, using as prefix, the desired prefix in
+    should reference typedef, using as prefix, the desired prefix in
         original module
     """
     yang = rpc_module.dump(ctx=ctx)

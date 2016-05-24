@@ -192,8 +192,9 @@ class Scanner(object):
         """Compose the key name with a prefix"""
         new_keys = []
         for key in keys:
-            new_key = key.copy()
-            new_key.arg = self.name_composer([prefix, key.arg])
+            new = key.copy()
+            new.arg = self.name_composer([prefix, key.arg])
+            new_keys.append(new)
 
         return new_keys
 
@@ -244,13 +245,13 @@ class Scanner(object):
 
         # finish tree traversal for atomic items
         if atomic_item:
-            return (_PRUNE, entries)
+            return (_PRUNE, entries, accessor_path)
 
         # for children, default keys should be prefixed in order to
         # guarantee uniqueness
         keys = self.prefix_keys(keys, item_name)
 
-        return (keys, entries)
+        return (keys, entries, accessor_path)
 
     def scan(self, statement):
         """Generates a list of entry-points for the deep-most data nodes.
@@ -305,7 +306,8 @@ class Scanner(object):
 
         keys = None
         if is_list(statement):
-            (keys, list_entries) = self.scan_list(statement, read_only)
+            (keys, list_entries, accessor_path) = self.scan_list(
+                statement, read_only)
             entries.extend(list_entries)
 
             if keys == _PRUNE:
@@ -316,6 +318,7 @@ class Scanner(object):
         #   - pyang resolves `uses`, `augment`, ... and store
         #     it under ``i_children``
         for child in statement.i_children:
+
             child_entries = self.scan(child)
             for entry in child_entries:
                 if read_only:

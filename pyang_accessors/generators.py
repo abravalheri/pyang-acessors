@@ -7,7 +7,7 @@ from inflection import dasherize
 from pyang.util import prefix_to_modulename_and_revision
 from pyang_builder import Builder
 from pyangext.definitions import HEADER_STATEMENTS, PREFIX_SEPARATOR
-from pyangext.utils import create_context, qualify_str
+from pyangext.utils import create_context, qualify_str, dump
 
 from .definitions import CHANGE_OP, ITEM_ADD_OP, ITEM_REMOVE_OP, READ_OP
 from .predicates import has_prefixed_arg, is_custom_type, is_extension
@@ -145,9 +145,10 @@ class RPCGenerator(object):
     DEFAULT_CONFIG = {
         'id_suffix': 'id',
         'data_suffix': 'data',
-        'data_and_id_suffix': 'full-data',
+        'data_and_id_suffix': 'request',
         'response_suffix': 'response',
         'suffix': 'interface',
+        'default_response_name': 'default-response',
         'choice_name': 'response',
         'success_name': 'success',
         'success_children_template': [
@@ -388,7 +389,15 @@ class RPCGenerator(object):
 
         compose = self.name_composer
 
+        already_created = []
         for entry in scanner.scan(module):
+            # print '\n\n---\npath:', entry.path
+            # print '\nparent_keys\n', '\n'.join([
+            #     dump(x) for x in entry.parent_keys])
+            # print '\nown_keys\n', '\n'.join([
+            #     dump(x) for x in entry.own_keys])
+            # print '\npayload\n', dump(entry.payload)
+
             # id group is just present if keys are not empty
             id_group = None
             keys = entry.parent_keys + entry.own_keys
@@ -408,7 +417,6 @@ class RPCGenerator(object):
                     data_and_id_group, entry.parent_keys)
                 group.uses(data_group)
 
-            taken = []
             for operation in entry.operations:
                 # --- OPERATIONS ---
                 rpc_name = compose([operation] + entry.path)
@@ -422,11 +430,7 @@ class RPCGenerator(object):
                     response_name = compose(
                         entry.path + [self.response_suffix])
                     # -- avoid duplicating groupings for READ and REMOVE
-                    if response_name not in taken:
-                        response_group = out.grouping(response_name)
-                        self.create_response_choice(
-                            response_group, [builder.uses(data_group)])
-                        taken.append(response_name)
+                    response_contents = [builder.uses(data_group)]
                 else:  # CHANGE_OP, ITEM_ADD_OP
                     # CHANGE/ADD request may specify parent + own keys and
                     # must specify data.
@@ -434,24 +438,30 @@ class RPCGenerator(object):
                     rpc.input().uses(
                         data_and_id_group if data_and_id_group else data_group
                     )
-                    response_name = compose([rpc_name, self.response_suffix])
-                    response_group = out.grouping(response_name)
 
                 if operation == CHANGE_OP:
                     # CHANGE request does not respond anything
                     # (except occasional error)
-                    self.create_response_choice(response_group)
+                    response_name = self.default_response_name
+                    response_contents = []
                 elif operation == ITEM_ADD_OP:
                     # ADD request responds with own keys
+                    response_name = compose([rpc_name, self.response_suffix])
                     id_group_is_own_key = (
                         len(keys) == 1 and keys[0] == entry.own_keys[0])
-                    self.create_response_choice(
-                        response_group,
+                    response_contents = (
                         [builder.uses(id_group)] if id_group_is_own_key
                         else entry.own_keys
                     )
 
-                rpc.output().uses(response_name)
+                if response_name and response_name not in already_created:
+                    response_group = out.grouping(response_name)
+                    self.create_response_choice(
+                        response_group, response_contents)
+                    already_created.append(response_name)
+
+                if response_name:
+                    rpc.output().uses(response_name)
 
         registry = ImportRegistry()
         normalize = Normalizer(self.ctx, registry)
