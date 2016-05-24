@@ -74,7 +74,7 @@ def test_create_id_group_for_implicity_key(rpc_module):
     should create a grouping named (list-item name + id-prefix)
     should have an ID leaf inside this group
     """
-    id_group = rpc_module.find('grouping', 'company-identification')
+    id_group = rpc_module.find('grouping', 'default-identification')
     assert id_group
     assert id_group.find('leaf', 'id')
 
@@ -92,13 +92,3 @@ def test_id_group_include_explicity_keys(rpc_module):
     assert id_group
     assert id_group.find('leaf', 'company')
     assert id_group.find('leaf', 'login')
-
-
-def test_create_value_node_for_leaf_list(rpc_module):
-    """
-    should create a grouping named (list-item name + id-prefix)
-    should have all the key leafs inside this group
-    """
-    id_group = rpc_module.find('grouping', 'slogan-identification')
-    assert id_group
-    assert id_group.find('leaf', 'id')

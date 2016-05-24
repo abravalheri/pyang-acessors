@@ -127,7 +127,7 @@ class EntryPoint(object):
             self.path,
             payload,
             self.operations[:],
-            self.parent_keys[:],
+            self.parent_keys.copy(),
             self.own_keys[:])
 
 
@@ -318,7 +318,7 @@ class Scanner(object):
                     entry.operations = READ_ONLY_OPS
                 if keys:
                     # relate a key with the last node name
-                    entry.parent_keys.append((accessor_path[-1], keys))
+                    entry.parent_keys[accessor_path[-1]] = keys
 
                 # prefix path with the parent path
                 entry.path = accessor_path + entry.path

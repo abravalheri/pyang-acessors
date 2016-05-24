@@ -193,11 +193,15 @@ class RPCGenerator(object):
         for prop, default in self.DEFAULT_CONFIG.items():
             setattr(self, prop, kwargs.get(prop) or default)
 
-    def _prefix_key(self, key, prefix):
+    def _prefix_keys(self, keys, prefix):
         """Compose the key name with a prefix"""
-        new = key.copy()
-        new.arg = self.name_composer([prefix, key.arg])
-        return new
+        prefixed = []
+        for key in keys:
+            new = key.copy()
+            new.arg = self.name_composer([prefix, key.arg])
+            prefixed.append(key)
+
+        return prefixed
 
     def _create_name(self, module, name):
         """Specify a name for the output module.
@@ -361,34 +365,39 @@ class RPCGenerator(object):
             content (list): key nodes that uniquelly references the entry-point.
         """
         group_name = None
+        path = entry.path
+        parent_keys = entry.parent_keys
 
-        # get the name of the nodes who have keys
-        keyed_items = entry.parent_keys.keys()
+        # get the name of the nodes who have keys in the order they appear
+        keyed_items = [name for name in path if name in parent_keys]
         if entry.own_keys:
             keyed_items.append(entry.path[-1])  # add the item name itself
 
+        if not keyed_items:
+            return (None, [])
+
         target = keyed_items[-1]  # <= last keyed item
-        predecessor_names = []
+        target_keys = parent_keys.get(target) or entry.own_keys
+
         # truncate the path before the last keyed item
-        for name in enty.path:
+        predecessor_names = []
+        for name in path:
             if name == target:
                 break
             predecessor_names.append(name)
 
-        parent_keys = []
-        for (parent_name, key) in entry.parent_keys:
-            # parent keys should be prefixed in order to
-            # guarantee uniqueness (except if it is the last keyed item)
-            if parent_name in predecessor_names:
-                key = self._prefix_key(key, parent_name)
-            parent_keys.extend(key)
+        # predecessor keys should be prefixed in order to
+        # guarantee uniqueness
+        predecessor_keys = []
+        for (name, keys) in parent_keys.items():
+            if name in predecessor_names:
+                keys = self._prefix_keys(keys, name)
+            predecessor_keys.extend(keys)
 
-        keys = parent_keys + entry.own_keys
-        if keys:
-            group_name = compose(predecessor_names +
-                               [target, self.identification_suffix])
+        group_name = self.name_composer(
+            predecessor_names + [target, self.identification_suffix])
 
-        return (group_name, keys)
+        return (group_name, predecessor_keys + target_keys)
 
     @staticmethod
     def _create_and_append_grouping(parent, name, content, registry):
@@ -466,8 +475,8 @@ class RPCGenerator(object):
                 :meth:`.dump() <pyang_builder.builder.Builder.dump>` method.
         """
 
-        (out, builder) = self.create_module_with_header(module, name, prefix,
-                                                        namespace, keyword)
+        (out, builder) = self._create_module_with_header(module, name, prefix,
+                                                         namespace, keyword)
 
         scanner = Scanner(
             builder, self.key_template,
@@ -496,7 +505,7 @@ class RPCGenerator(object):
         for entry in scanner.scan(module):
             # The ID Grouping is used by READ and ITEM_REMOVE operations
             # since it is necessary to specify which node is the target
-            (id_group, keys) = self._define_id_group(entry, builder)
+            (id_group, keys) = self._define_id_grouping(entry)
 
             # Data Grouping is always present because READ is always present
             # and it is the response
@@ -514,8 +523,8 @@ class RPCGenerator(object):
                 fake_entry = entry.copy()
                 fake_entry.own_keys = None
 
-                (parent_id_group, parent_id_content) = (
-                    self._define_id_group(fake_entry, builder)
+                parent_id_group, parent_id_content = (
+                    self._define_id_grouping(fake_entry)
                 )
 
                 # data_and_id_group = compose(
@@ -525,12 +534,12 @@ class RPCGenerator(object):
 
             for operation in entry.operations:
                 # ================ =================== ==================
-                #  accessor type        request             response
+                # accessor type         request             response
                 # ================ =================== ==================
-                #  READ             parent + own keys   error || data
-                #  CHANGE           parent keys + data  error || success
-                #  ITEM_ADD         parent keys + data  error || own keys
-                #  ITEM_REMOVE      keys                error || data
+                # READ             parent + own keys   error || data
+                # CHANGE           parent keys + data  error || success
+                # ITEM_ADD         parent keys + data  error || own keys
+                # ITEM_REMOVE      keys                error || data
                 # ================ =================== ==================
 
                 rpc_name = compose([operation] + entry.path)
