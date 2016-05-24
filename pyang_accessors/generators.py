@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""
+"""\
+Tools for generating a RPC specification from a YANG abstract syntax tree.
 """
 from inflection import dasherize
 
@@ -42,15 +43,15 @@ def create_imports(module, builder, registry):
 
 
 class Normalizer(object):
-    """Walk the AST finding external dependencies, prefixing and importing it
+    """Walk the AST finding external dependencies, prefixing and importing it.
     """
 
     def __init__(self, ctx, registry):
         """Creates a Normalizer object
 
         Arguments:
-            ctx (pyang.Context): context to be used for prefix resolution
-            registry (ImportRegistry): new imports that should be used
+            ctx (pyang.Context): Context to be used for prefix resolution.
+            registry (ImportRegistry): New imports that should be used.
         """
         self.ctx = ctx
         self.registry = registry
@@ -60,9 +61,9 @@ class Normalizer(object):
 
         Arguments:
             node (pyang.statements.Statement):
-                node whose attr will be reprefixed.
-            attr (str): name of the attribute to be reprefixed,
-                e.g.: arg, keyword
+                Node whose attr will be re-prefixed.
+            attr (str): Name of the attribute to be re-prefixed,
+                e.g.: arg, keyword.
 
         Returns:
             tuple: (node, new_prefix, mod_name, mod_revision, attr_value)
@@ -79,13 +80,13 @@ class Normalizer(object):
         # 3rd: add module to the import list and retrieve a new unique prefix
         prefix = self.registry.add(prefix, name, revision)
 
-        # 4th: Change de node itself to use the new prefix!
+        # 4th: Change the node itself to use the new prefix!
         setattr(node, attr, PREFIX_SEPARATOR.join((prefix, value)))
 
         return (node, prefix, name, revision, value)
 
     def extension(self, node):
-        """Re-prefix extension to be used in a new module"""
+        """Re-prefix extension to be used in a new module."""
         node, prefix, name, _, value = self.namespaced_attribute(
             node, 'raw_keyword')
 
@@ -95,7 +96,7 @@ class Normalizer(object):
         return node
 
     def prefixed_arg(self, node):
-        """Re-prefix arg to be used in a new module"""
+        """Re-prefix arg to be used in a new module."""
         node, _, _, _, _ = self.namespaced_attribute(node, 'arg')
 
         return node
@@ -112,7 +113,7 @@ class Normalizer(object):
             parent (pyang_builder.StatementWrapper):
                 Node from where the recursive search will be conducted.
         """
-        # since custom type becames a prefixed arg, do not run it before
+        # since custom type become a prefixed arg, do not run it before
         # prefixed arg hook
         parent.walk(has_prefixed_arg, self.prefixed_arg)
         parent.walk(is_custom_type, self.prefixed_arg)
@@ -120,15 +121,26 @@ class Normalizer(object):
 
 
 class RPCGenerator(object):
-    """Generates a new YANG module with accessors for the input module.
+    """Generates a YANG specification of RPC service based on an input module.
 
-    RPC getter/setter each leaf of the input module
+    This service provides ways of changing the deep-most
+    data nodes under the original YANG module tree. Such mechanism is called
+    ``accessors``.
 
-    Attributes:
-        input_grouping_suffix (str):
-        output_grouping_suffix (str):
-        error_container_name (str):
+    __Accessors__ are described as operations over the deep-most data
+    data nodes under the original YANG module tree.
+    Four types of ``accessors`` are provided:
+
+    - a **READ** accessor (equivalent to a ``get`` operation),
+    - a **CHANGE** accessor (equivalent to a ``set`` operation),
+    - an **ITEM ADD** accessor, to add elements to a list,
+    - an **ITEM_REMOVE** accessor, to remove elements from a list.
+
+    The main method of this class is the :meth:`~RPCGenerator.transform`
+    and the other methods, classes or functions of the module are designed
+    to support it.
     """
+    # pylint: disable=no-member
 
     DEFAULT_CONFIG = {
         'id_suffix': 'id',
@@ -149,7 +161,7 @@ class RPCGenerator(object):
                 ('type', 'int32'),
                 ('description', 'numeric code for the failure.'),
             ]),
-            ('leaf', 'message', [
+            ('leaf', 'error-message', [
                 ('type', 'string'),
                 ('description', 'textual description of failure.')
             ]),
@@ -170,16 +182,18 @@ class RPCGenerator(object):
         'description_template': 'Accessors interface for module: `{}`.',
         'value_arg': 'value',
     }
+    """Default configuration for the generator.
+
+    This configurations the way of how the output module is built.
+    """
 
     def __init__(self, ctx=None, **kwargs):
-        """
+        """Initialize RPC generator
 
-        Keyword Arguments:
-            input_grouping_suffix
-            output_grouping_suffix
-            error_mixin
-            default_key
-            name_composer func(array) -> string, default is dasherize
+        Arguments:
+            ctx (pyang.Context): context to be used for module
+                search/validation.
+            **kwargs: configurations to override the defaults.
         """
 
         self.ctx = ctx or create_context()
@@ -190,22 +204,68 @@ class RPCGenerator(object):
             setattr(self, prop, kwargs.get(prop) or default)
 
     def create_name(self, module, name):
+        """Specify a name for the output module.
+
+        Arguments:
+            module (pyang.statements.Statement): Original module.
+            name (str): None or name from the configuration options /
+                command line.
+
+        Returns:
+            str: Name if specified or a suffixed version of the original
+                module name.
+        """
         module_name = module.arg
         joiner = '_' if '_' in module_name else '-'
         return name or joiner.join([module_name, self.suffix])
 
     def create_namespace(self, module, namespace):
+        """Specify a namespace for the output module.
+
+        Arguments:
+            module (pyang.statements.Statement): Original module.
+            namespace (str): None or namespace from the configuration options
+                / command line.
+
+        Returns:
+            str: Namespace if specified or a suffixed version of the
+                original module namespace.
+        """
         module_namespace = module.search_one('namespace').arg
         joiner = '/' if '://' in module_namespace else ':'
         return namespace or joiner.join([module_namespace, self.suffix])
 
     def create_prefix(self, module, prefix):
+        """Specify a prefix for the output module.
+
+        Arguments:
+            module (pyang.statements.Statement): Original module.
+            prefix (str): None or prefix from the configuration options /
+                command line.
+
+        Returns:
+            str: Prefix if specified or a suffixed version of the
+                original module prefix.
+        """
         module_prefix = module.search_one('prefix').arg
         joiner = '_' if '_' in module_prefix else '-'
         return prefix or joiner.join([module_prefix, self.suffix])
 
     def create_module_with_header(self, module, name=None, prefix=None,
                                   namespace=None, keyword='module'):
+        """Start the generation of a YANG abstract syntax tree for a module.
+
+        Arguments:
+            module (pyang.statements.Statement): Original module.
+            name (str): Name for the output module.
+            prefix (str): Prefix for the output module.
+            namespace (str): Namespace for the output module.
+            keyword (str): ``module`` or ``submodule``
+
+        Returns:
+            str: Namespace if specified or a suffixed version of the
+                original module namespace.
+        """
         name = self.create_name(module, name)
         prefix = self.create_prefix(module, prefix)
         namespace = self.create_namespace(module, namespace)
@@ -217,19 +277,40 @@ class RPCGenerator(object):
         out.namespace(namespace)
         out.prefix(prefix)
 
+        i = 2  # i is the position where the description should be placed
         # copy header statements
         for header in HEADER_STATEMENTS:
             node = module.search_one(header)
             if not node:
                 continue
+            if node.keyword != 'revision':
+                # descriptions should be placed before revision
+                i += 1
             out.append(node.copy(out_raw))
 
-        desc = out.description(self.description_template.format(module.arg))
-        desc.comment(self.warning_banner)
+        desc = builder.description(
+            self.description_template.format(module.arg), parent=out_raw)
+        comment = builder.comment(self.warning_banner, parent=out_raw)
+
+        out_raw.substmts.insert(i, comment.unwrap())
+        out_raw.substmts.insert(i, desc.unwrap())
 
         return (out, builder)
 
     def create_response_choice(self, parent, success_children=None):
+        """Creates a ``choice`` node under a parent node.
+
+        The ``choice`` node means just one child can exist at each time.
+        In this case, the choice statement is used to impose the response
+        status: **or there was a failure with the RPC, or it was successful**.
+
+        Arguments:
+            parent (pyang_builder.StatementWrapper):
+                Node below which the ``choice`` will be placed.
+            success_children (list): list of data nodes that corresponds
+                to the RPC response. If no list is provided, the default
+                behavior is to have an ``ok`` leaf.
+        """
         choice = parent.choice(self.choice_name)
 
         choice.default(self.success_name)
@@ -247,6 +328,42 @@ class RPCGenerator(object):
     def transform(self, module,
                   name=None, prefix=None, namespace=None,
                   keyword='module'):
+        """Creates a RPC service definition from a YANG module.
+
+        Given a input YANG module, this method generates an associated
+        service specification for accessing its data nodes, as another
+        related YANG module.
+
+        For example, if the original module has an leaf named ``username``,
+        the generated module will have two RPC nodes: ``set-username`` and
+        ``get-username``.
+
+        Arguments:
+            module (pyang.statements.Statement):
+                Original module that describes the data structure.
+            name (str): Name for the output module **(optional)**.
+            prefix (str): Prefix for the output module **(optional)**.
+            namespace (str): Namespace for the output module **(optional)**.
+            keyword (str): ``module`` or ``submodule`` (see YANG RFC).
+                The default value is ``module``.
+
+        If no ``name``, ``prefix`` or ``namespace`` is passed, the default
+        behavior is composing it from the original module attributes.
+        In order to perform this composition, a suffix is added to the
+        retrieved attributes. This suffix can be changed by changing the
+        object attribute ``suffix`` and the default value is __interface__.
+        The way this combination is performed depends on other attribute, the
+        ``name_composer``, a function which receives an array and should
+        return a string (the default function dasherizes the result). Both
+        attributes can be changed directly in the instance object, or by
+        passing named parameters to the object constructor.
+
+        Returns:
+            pyang_builder.StatementWrapper: Abstract Syntax Tree for the
+                output module. This AST can be turned into a string by
+                calling the
+                :meth:`.dump() <pyang_builder.builder.Builder.dump>` method.
+        """
 
         (out, builder) = self.create_module_with_header(module, name, prefix,
                                                         namespace, keyword)

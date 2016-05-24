@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-"""
+"""Tools for managing the imported modules, its prefixed and revisions."""
 from __future__ import unicode_literals
 
 import inflection
@@ -57,7 +56,7 @@ class ImportRegistry(object):
 
         Arguments:
             prefix (str): A suggestion about what prefix to use.
-                Not necessarly it will be used...
+                Not necessarily it will be used...
             name (str): module name
             revision (str): identification of the module revision.
 
@@ -67,7 +66,7 @@ class ImportRegistry(object):
         Returns:
             str: The prefix that should be used for the module.
         """
-        # See if module was already registed
+        # See if module was already registered
         some_prefix, some_revision = self.by_name.get(name, (None, None))
 
         if some_revision and some_revision != revision:
@@ -85,7 +84,7 @@ class ImportRegistry(object):
         occurencies = self.prefix_request.get(prefix, 0) + 1
 
         if occurencies > 1:
-            # Increment the number of colisions because 2 different modules
+            # Increment the number of collisions because 2 different modules
             # are trying to use the same prefix.
             self.prefix_request[prefix] = occurencies
             # Generate a brand new prefix, by adding the counter

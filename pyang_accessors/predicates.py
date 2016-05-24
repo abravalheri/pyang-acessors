@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=missing-docstring
 """Functions for qualifying nodes."""
 
 from pyangext.definitions import (
     BUILT_IN_TYPES,
     DATA_STATEMENTS,
     PREFIX_SEPARATOR,
-    URL_SEPARATOR,
     YANG_KEYWORDS
 )
 from pyangext.utils import find

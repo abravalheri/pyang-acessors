@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-"""
-import optparse
+"""Plugin for pyang that applies the RPCGenerator to the input module"""
+import optparse  # pylint: disable=deprecated-module
 import re
 
 from pyang import plugin
@@ -17,13 +16,15 @@ FILENAME_REGEX = re.compile(r"^(.*?)(\@(\d{4}-\d{2}-\d{2}))?\.(\w+)$")
 
 
 def pyang_plugin_init():
+    """Register plugin in ``pyang`` control structures"""
     plugin.register_plugin(RPCAccessorsPlugin())
 
 
 class RPCAccessorsPlugin(plugin.PyangPlugin):
+    """Plugin that applies the RPCGenerator transformation."""
 
     def add_opts(self, optparser):
-        """Add command line options"""
+        """Add specific command line options"""
         optgrp = optparser.add_option_group(
             '`pyang-accessors` plugin specific options')
         optgrp.add_options([
