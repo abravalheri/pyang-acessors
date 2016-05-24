@@ -76,7 +76,7 @@ def test_create_id_group_for_implicity_key(rpc_module):
     """
     id_group = rpc_module.find('grouping', 'company-identification')
     assert id_group
-    assert id_group.find('leaf', 'company-id')
+    assert id_group.find('leaf', 'id')
 
 
 def test_id_group_include_explicity_keys(rpc_module):
@@ -86,12 +86,12 @@ def test_id_group_include_explicity_keys(rpc_module):
     """
     id_group = rpc_module.find('grouping', 'domain-identification')
     assert id_group
-    assert id_group.find('leaf', 'domain-url')
+    assert id_group.find('leaf', 'url')
 
     id_group = rpc_module.find('grouping', 'user-identification')
     assert id_group
-    assert id_group.find('leaf', 'user-company')
-    assert id_group.find('leaf', 'user-login')
+    assert id_group.find('leaf', 'company')
+    assert id_group.find('leaf', 'login')
 
 
 def test_create_value_node_for_leaf_list(rpc_module):

@@ -19,29 +19,6 @@ __copyright__ = "andersonbravalheri@gmail.com"
 __license__ = "mozilla"
 
 
-def create_imports(module, builder, registry):
-    """Add imports from a registry to a module"""
-    raw_node = module.unwrap()
-    substmts = raw_node.substmts
-
-    # iterate in the reverse order, so each new import can be placed
-    # at the top of the previous, and in the end the order will
-    # be corrected
-    registry_data = registry.by_prefix.items()
-    for (prefix, (module_name, revision)) in reversed(registry_data):
-        # creates a new import
-        import_node = builder(
-            'import', module_name, ('prefix', prefix), parent=raw_node)
-
-        if revision and revision != 'unknown':
-            import_node.revision(revision, parent=raw_node)
-
-        # the 1st node is the namespace
-        # the 2st node is the prefix
-        # all the import nodes should be after it
-        substmts.insert(2, import_node.unwrap())
-
-
 class Normalizer(object):
     """Walk the AST finding external dependencies, prefixing and importing it.
     """
@@ -136,16 +113,28 @@ class RPCGenerator(object):
     - an **ITEM ADD** accessor, to add elements to a list,
     - an **ITEM_REMOVE** accessor, to remove elements from a list.
 
-    The main method of this class is the :meth:`~RPCGenerator.transform`
-    and the other methods, classes or functions of the module are designed
-    to support it.
+    The information transfered during RPC is listed in the table bellow,
+    according to the accessor type:
+
+    ================ =================== ==================
+     accessor type        request             response
+    ================ =================== ==================
+     READ             parent + own keys   error || data
+     CHANGE           parent keys + data  error || success
+     ITEM_ADD         parent keys + data  error || own keys
+     ITEM_REMOVE      keys                error || data
+    ================ =================== ==================
+
+    Here ``data`` is the value of the node itself and ``key`` is used to
+    identify a node in a list.
     """
     # pylint: disable=no-member
 
     DEFAULT_CONFIG = {
-        'id_suffix': 'id',
+        'key_suffix': 'id',
         'data_suffix': 'data',
-        'data_and_id_suffix': 'request',
+        'data_and_key_suffix': 'request',
+        'identification_suffix': 'identification',
         'response_suffix': 'response',
         'suffix': 'interface',
         'default_response_name': 'default-response',
@@ -204,7 +193,13 @@ class RPCGenerator(object):
         for prop, default in self.DEFAULT_CONFIG.items():
             setattr(self, prop, kwargs.get(prop) or default)
 
-    def create_name(self, module, name):
+    def _prefix_key(self, key, prefix):
+        """Compose the key name with a prefix"""
+        new = key.copy()
+        new.arg = self.name_composer([prefix, key.arg])
+        return new
+
+    def _create_name(self, module, name):
         """Specify a name for the output module.
 
         Arguments:
@@ -220,7 +215,7 @@ class RPCGenerator(object):
         joiner = '_' if '_' in module_name else '-'
         return name or joiner.join([module_name, self.suffix])
 
-    def create_namespace(self, module, namespace):
+    def _create_namespace(self, module, namespace):
         """Specify a namespace for the output module.
 
         Arguments:
@@ -236,7 +231,7 @@ class RPCGenerator(object):
         joiner = '/' if '://' in module_namespace else ':'
         return namespace or joiner.join([module_namespace, self.suffix])
 
-    def create_prefix(self, module, prefix):
+    def _create_prefix(self, module, prefix):
         """Specify a prefix for the output module.
 
         Arguments:
@@ -252,7 +247,7 @@ class RPCGenerator(object):
         joiner = '_' if '_' in module_prefix else '-'
         return prefix or joiner.join([module_prefix, self.suffix])
 
-    def create_module_with_header(self, module, name=None, prefix=None,
+    def _create_module_with_header(self, module, name=None, prefix=None,
                                   namespace=None, keyword='module'):
         """Start the generation of a YANG abstract syntax tree for a module.
 
@@ -267,9 +262,9 @@ class RPCGenerator(object):
             str: Namespace if specified or a suffixed version of the
                 original module namespace.
         """
-        name = self.create_name(module, name)
-        prefix = self.create_prefix(module, prefix)
-        namespace = self.create_namespace(module, namespace)
+        name = self._create_name(module, name)
+        prefix = self._create_prefix(module, prefix)
+        namespace = self._create_namespace(module, namespace)
 
         # create an output module
         builder = Builder(name, keyword=keyword)
@@ -298,7 +293,7 @@ class RPCGenerator(object):
 
         return (out, builder)
 
-    def create_response_choice(self, parent, success_children=None):
+    def _create_response_choice(self, parent, success_children=None):
         """Creates a ``choice`` node under a parent node.
 
         The ``choice`` node means just one child can exist at each time.
@@ -325,6 +320,111 @@ class RPCGenerator(object):
         failure.uses(self.failure_name)
 
         return choice
+
+    def _define_id_grouping(self, entry):
+        """Define an ID Grouping.
+
+        The ID Grouping should be formed of all the keys necessary
+        to achieve the entry-point. It should be named truncating
+        the path until the last keyed item, to improve sharing.
+
+        For exemple, consider the following YANG described strucutre::
+
+            list user {
+               list posts {
+                   leaf content { type string; }
+                   leaf date { type string; }
+               }
+            }
+
+        Consider the entry-point "user/post/content"
+        the ID Grouping should be::
+
+            grouping user-post-identification {
+               leaf user-id { type int32; }
+               leaf id { type int32; }  // -> ID of post
+            }
+
+        The same ID Grouping shoud shared with entry-point "user/post/date".
+
+        The last key should not be prefixed, but the predecessors should,
+        in order to guarantee uniqueness.
+
+        .. note:: This method do not actually create the complete ``grouping``
+            just returns its name and content
+
+        Arguments:
+            entry: entry-point generated by scanner.
+
+        Returns:
+            group_name (str): the name of the grouping created.
+            content (list): key nodes that uniquelly references the entry-point.
+        """
+        group_name = None
+
+        # get the name of the nodes who have keys
+        keyed_items = entry.parent_keys.keys()
+        if entry.own_keys:
+            keyed_items.append(entry.path[-1])  # add the item name itself
+
+        target = keyed_items[-1]  # <= last keyed item
+        predecessor_names = []
+        # truncate the path before the last keyed item
+        for name in enty.path:
+            if name == target:
+                break
+            predecessor_names.append(name)
+
+        parent_keys = []
+        for (parent_name, key) in entry.parent_keys:
+            # parent keys should be prefixed in order to
+            # guarantee uniqueness (except if it is the last keyed item)
+            if parent_name in predecessor_names:
+                key = self._prefix_key(key, parent_name)
+            parent_keys.extend(key)
+
+        keys = parent_keys + entry.own_keys
+        if keys:
+            group_name = compose(predecessor_names +
+                               [target, self.identification_suffix])
+
+        return (group_name, keys)
+
+    @staticmethod
+    def _create_and_append_grouping(parent, name, content, registry):
+        """Create a new grouping and appends to the output if not present.
+
+        Arguments:
+            out: the parent node
+            name: argument for the grouping
+            content (list): children to be appended
+        """
+        if name and name not in registry:
+            parent.grouping(name, content)
+            registry.append(name)
+
+    @staticmethod
+    def _create_imports(module, builder, registry):
+        """Add imports from a registry to a module"""
+        raw_node = module.unwrap()
+        substmts = raw_node.substmts
+
+        # iterate in the reverse order, so each new import can be placed
+        # at the top of the previous, and in the end the order will
+        # be corrected
+        registry_data = registry.by_prefix.items()
+        for (prefix, (module_name, revision)) in reversed(registry_data):
+            # creates a new import
+            import_node = builder(
+                'import', module_name, ('prefix', prefix), parent=raw_node)
+
+            if revision and revision != 'unknown':
+                import_node.revision(revision, parent=raw_node)
+
+            # the 1st node is the namespace
+            # the 2st node is the prefix
+            # all the import nodes should be after it
+            substmts.insert(2, import_node.unwrap())
 
     def transform(self, module,
                   name=None, prefix=None, namespace=None,
@@ -370,103 +470,122 @@ class RPCGenerator(object):
                                                         namespace, keyword)
 
         scanner = Scanner(
-            builder, self.key_template, self.name_composer, self.value_arg)
+            builder, self.key_template,
+            self.name_composer, self.key_suffix, self.value_arg)
 
         entries = scanner.scan(module)
         if not entries:
             return out
 
-        # all response messages should have optional failure nodes
-        # these nodes is determined by `failure_children_template` option
-        failure = builder.grouping(
-            self.failure_name, self.failure_children_template, parent=out
-        )
-        out.append(failure)
-        success = builder.grouping(
-            self.success_name, self.success_children_template, parent=out
-        )
-        out.append(success)
-
         compose = self.name_composer
 
+        # registry of groupings already created
         already_created = []
+
+        # all response messages should have optional failure nodes
+        # these nodes is determined by `failure_children_template` option
+        failure_name = self.failure_name
+        failure_content = self.failure_children_template
+
+        # Default dumb success nodes are also required, because CHANGE
+        # operations return it
+        success_name = self.default_response_name
+        success_content = self.success_children_template
+
+
         for entry in scanner.scan(module):
-            # print '\n\n---\npath:', entry.path
-            # print '\nparent_keys\n', '\n'.join([
-            #     dump(x) for x in entry.parent_keys])
-            # print '\nown_keys\n', '\n'.join([
-            #     dump(x) for x in entry.own_keys])
-            # print '\npayload\n', dump(entry.payload)
+            # The ID Grouping is used by READ and ITEM_REMOVE operations
+            # since it is necessary to specify which node is the target
+            (id_group, keys) = self._define_id_group(entry, builder)
 
-            # id group is just present if keys are not empty
-            id_group = None
-            keys = entry.parent_keys + entry.own_keys
-            if keys:
-                id_group = compose(entry.path + [self.id_suffix])
-                out.grouping(id_group).append(*keys)
-
-            # data grouping is always present because READ is always present
+            # Data Grouping is always present because READ is always present
+            # and it is the response
             data_group = compose(entry.path + [self.data_suffix])
-            out.grouping(data_group, entry.payload)
 
-            data_and_id_group = None
+            # For CHANGE + ITEM_ADD operations it is necessary to specify
+            # both the the keys to achieve the node and
+            # the data inserted/changed
+            # It is important to note that own keys are already present
+            # inside data. So if there is no parent keys, this group is
+            # unecessary
+            parent_id_group = None
+            parent_id_content = None
             if entry.parent_keys:
-                data_and_id_group = compose(
-                    entry.path + [self.data_and_id_suffix])
-                group = out.grouping(
-                    data_and_id_group, entry.parent_keys)
-                group.uses(data_group)
+                fake_entry = entry.copy()
+                fake_entry.own_keys = None
+
+                (parent_id_group, parent_id_content) = (
+                    self._define_id_group(fake_entry, builder)
+                )
+
+                # data_and_id_group = compose(
+                #     entry.path + [self.data_and_key_suffix])
+
+                # data_and_id = parent_keys + [builder.uses(data_group)]
 
             for operation in entry.operations:
-                # --- OPERATIONS ---
+                # ================ =================== ==================
+                #  accessor type        request             response
+                # ================ =================== ==================
+                #  READ             parent + own keys   error || data
+                #  CHANGE           parent keys + data  error || success
+                #  ITEM_ADD         parent keys + data  error || own keys
+                #  ITEM_REMOVE      keys                error || data
+                # ================ =================== ==================
+
                 rpc_name = compose([operation] + entry.path)
-                rpc = out.rpc(rpc_name)
+                request_name = None
+                request_content = None
+                response_name = None
+                response_content = None
+
                 if any(op == operation for op in (READ_OP, ITEM_REMOVE_OP)):
                     # READ/REMOVE request may specify parent + own keys
                     # (id_group).
-                    if id_group:
-                        rpc.input().uses(id_group)
+                    request_name = id_group
+                    request_content = keys
                     # Responds with data
-                    response_name = compose(
-                        entry.path + [self.response_suffix])
-                    # -- avoid duplicating groupings for READ and REMOVE
-                    response_contents = [builder.uses(data_group)]
+                    response_name = (
+                        compose(entry.path + [self.response_suffix]))
+                    self._create_and_append_grouping(
+                        out, data_group, entry.payload, already_created)
+                    response_content = [builder.uses(data_group)]
                 else:  # CHANGE_OP, ITEM_ADD_OP
                     # CHANGE/ADD request may specify parent + own keys and
                     # must specify data.
                     # own keys are already present in the payload (data_group)
-                    rpc.input().uses(
-                        data_and_id_group if data_and_id_group else data_group
-                    )
+                    request_name = parent_id_group or data_group
+                    request_content = parent_id_content or entry.payload
 
                 if operation == CHANGE_OP:
                     # CHANGE request does not respond anything
                     # (except occasional error)
-                    response_name = self.default_response_name
-                    response_contents = []
+                    response_name = success_name
+                    response_content = success_content
                 elif operation == ITEM_ADD_OP:
                     # ADD request responds with own keys
                     response_name = compose([rpc_name, self.response_suffix])
-                    id_group_is_own_key = (
-                        len(keys) == 1 and keys[0] == entry.own_keys[0])
-                    response_contents = (
-                        [builder.uses(id_group)] if id_group_is_own_key
+                    response_content = (
+                        [builder.uses(id_group)] if not parent_id_content
                         else entry.own_keys
                     )
 
-                if response_name and response_name not in already_created:
-                    response_group = out.grouping(response_name)
-                    self.create_response_choice(
-                        response_group, response_contents)
-                    already_created.append(response_name)
+                # self._create_response_choice()
 
+                self._create_and_append_grouping(
+                        out, request_name, request_content, already_created)
+                self._create_and_append_grouping(
+                        out, response_name, response_content, already_created)
+                rpc = out.rpc(rpc_name)
+                if request_name:
+                    rpc.input().uses(request_name)
                 if response_name:
                     rpc.output().uses(response_name)
 
         registry = ImportRegistry()
         normalize = Normalizer(self.ctx, registry)
         normalize.external_definitions(out)
-        create_imports(out, builder, registry)
+        self._create_imports(out, builder, registry)
 
         out.validate(self.ctx, rescue=True)
 

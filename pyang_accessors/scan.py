@@ -79,8 +79,8 @@ class EntryPoint(object):
             See :module:`pyang_accessors.definitions`
         payload (pyang.statements.Statement):
             statement that define the data node
-        parent_keys (list): If any parent of the target link is an element
-            of a list, its key is added to this list
+        parent_keys (dict): If any parent of the target link is an element
+            of a list, its key is added to this dict by item name
         own_keys: list of keys for the target node
     """
 
@@ -91,7 +91,7 @@ class EntryPoint(object):
         if operations is None:
             operations = [READ_OP]
         if parent_keys is None:
-            parent_keys = []
+            parent_keys = {}
         if own_keys is None:
             own_keys = []
 
@@ -147,7 +147,7 @@ class Scanner(object):
     """
 
     def __init__(self, builder, key_template,
-                 name_composer, value_arg='value'):
+                 name_composer, key_name=None, value_arg='value'):
         """Initialize the scanner object.
 
         Arguments:
@@ -158,6 +158,9 @@ class Scanner(object):
                 ``('leaf', 'id', [('type', 'int32')])`` which is equivalent
                 to the yang statement ``leaf id { type int32; }``.
                 See :meth:`pyang_builder.Builder.from_tuple`.
+            key_name (str): Name of the default key. If it is passed the
+                argument of the node generated with ``key_template``
+                will be changed to it.
             name_composer (function): Callable object used to compose a new
                 name from a list of other names. It is mainly used to compose
                 the default key name for the parent nodes,
@@ -181,22 +184,16 @@ class Scanner(object):
         """
         self.key_template = key_template
         self.builder = builder
+        self.key_name = key_name
         self.name_composer = name_composer
         self.value_arg = value_arg
 
     def default_key(self):
         """Render the default key template into a Statement"""
-        return self.builder.from_tuple(self.key_template).unwrap()
-
-    def prefix_keys(self, keys, prefix):
-        """Compose the key name with a prefix"""
-        new_keys = []
-        for key in keys:
-            new = key.copy()
-            new.arg = self.name_composer([prefix, key.arg])
-            new_keys.append(new)
-
-        return new_keys
+        key = self.builder.from_tuple(self.key_template).unwrap()
+        if self.key_name:
+            key.arg = self.key_name
+        return key
 
     def singularize_list(self, statement, item_name):
         """Generates a data description for one element of the list."""
@@ -246,10 +243,6 @@ class Scanner(object):
         # finish tree traversal for atomic items
         if atomic_item:
             return (_PRUNE, entries, accessor_path)
-
-        # for children, default keys should be prefixed in order to
-        # guarantee uniqueness
-        keys = self.prefix_keys(keys, item_name)
 
         return (keys, entries, accessor_path)
 
@@ -324,8 +317,8 @@ class Scanner(object):
                 if read_only:
                     entry.operations = READ_ONLY_OPS
                 if keys:
-                    # prepends -> according to traversal order
-                    entry.parent_keys = keys + entry.parent_keys
+                    # relate a key with the last node name
+                    entry.parent_keys.append((accessor_path[-1], keys))
 
                 # prefix path with the parent path
                 entry.path = accessor_path + entry.path

@@ -96,7 +96,7 @@ def test_consider_leaf_list_atomic_item(rpc_module):
     leaf-lists should be considered atomic-item
     """
     # entry point receives name in singular
-    for leaf_name in ('admin', 'user'):
+    for leaf_name in ('admin', 'user')
         rpc = rpc_module.find('rpc', 'get-'+leaf_name)
         assert rpc
         # get needs an ID to find the correct entry
