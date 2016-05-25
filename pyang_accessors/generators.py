@@ -7,7 +7,7 @@ from inflection import dasherize
 from pyang.util import prefix_to_modulename_and_revision
 from pyang_builder import Builder
 from pyangext.definitions import HEADER_STATEMENTS, PREFIX_SEPARATOR
-from pyangext.utils import create_context, qualify_str, dump
+from pyangext.utils import create_context, qualify_str
 
 from .definitions import CHANGE_OP, ITEM_ADD_OP, ITEM_REMOVE_OP, READ_OP
 from .predicates import has_prefixed_arg, is_custom_type, is_extension
@@ -172,7 +172,6 @@ class RPCGenerator(object):
             '----------------------------------------------------------'
         ),
         'description_template': 'Accessors interface for module: `{}`.',
-        'value_arg': 'value',
     }
     """Default configuration for the generator.
 
@@ -258,7 +257,7 @@ class RPCGenerator(object):
         return prefix or joiner.join([module_prefix, self.suffix])
 
     def _create_module_with_header(self, module, name=None, prefix=None,
-                                  namespace=None, keyword='module'):
+                                   namespace=None, keyword='module'):
         """Start the generation of a YANG abstract syntax tree for a module.
 
         Arguments:
@@ -335,7 +334,7 @@ class RPCGenerator(object):
         to achieve the entry-point. It should be named truncating
         the path until the last keyed item, to improve sharing.
 
-        For exemple, consider the following YANG described strucutre::
+        For example, consider the following YANG described structure::
 
             list user {
                list posts {
@@ -352,12 +351,13 @@ class RPCGenerator(object):
                leaf id { type int32; }  // -> ID of post
             }
 
-        The same ID Grouping shoud shared with entry-point "user/post/date".
+        The same ID Grouping should be shared with entry-point
+        "user/post/date".
 
         The last key should not be prefixed, but the predecessors should,
         in order to guarantee uniqueness.
 
-        If the onlye key is the default key, the group name should be
+        If the only key is the default key, the group name should be
         "default" + identification_prefix.
 
         .. note:: This method do not actually create the complete ``grouping``
@@ -368,7 +368,7 @@ class RPCGenerator(object):
 
         Returns:
             group_name (str): the name of the grouping created.
-            content (list): key nodes that uniquelly references the entry-point.
+            content (list): nodes that uniquely references the entry-point.
         """
         group_name = None
         path = entry.path
@@ -486,8 +486,7 @@ class RPCGenerator(object):
                                                          namespace, keyword)
 
         scanner = Scanner(
-            builder, self.key_template,
-            self.name_composer, self.key_suffix, self.value_arg)
+            builder, self.key_template, self.name_composer, self.key_suffix)
 
         entries = scanner.scan(module)
         if not entries:
@@ -522,7 +521,7 @@ class RPCGenerator(object):
             # the data inserted/changed
             # It is important to note that own keys are already present
             # inside data. So if there is no parent keys, this group is
-            # unecessary
+            # unnecessary
             parent_id_group = None
             parent_id_content = None
             if entry.parent_keys:

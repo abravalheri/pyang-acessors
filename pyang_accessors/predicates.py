@@ -37,6 +37,10 @@ def is_atomic_item(statement):
     )
 
 
+def is_container(statement):
+    return statement.keyword == 'container'
+
+
 def is_data(statement):
     return statement.keyword in DATA_STATEMENTS
 
@@ -51,6 +55,14 @@ def is_included_item(statement):
 
 def is_list(statement):
     return statement.keyword in ('list', 'leaf-list')
+
+
+def is_leaf_list(statement):
+    return statement.keyword == 'leaf-list'
+
+
+def is_plain(statement):
+    return statement.keyword in ('leaf', 'anyxml')
 
 
 def is_read_only(statement):

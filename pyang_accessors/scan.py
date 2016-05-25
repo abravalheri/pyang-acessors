@@ -6,7 +6,7 @@ from itertools import chain as concat
 
 from inflection import singularize
 
-from pyang_builder import StatementWrapper
+from pyang_builder import ListWrapper
 from pyangext.utils import find, select
 
 from .definitions import (  # constants and identifiers
@@ -21,7 +21,9 @@ from .predicates import (
     is_data,
     is_included,
     is_included_item,
+    is_leaf_list,
     is_list,
+    is_plain,
     is_read_only,
     is_top_level
 )
@@ -77,8 +79,8 @@ class EntryPoint(object):
         path (list): names of nodes the tree, ordered from root to target
         operations (list): list with names of operations.
             See :module:`pyang_accessors.definitions`
-        payload (pyang.statements.Statement):
-            statement that define the data node
+        payload (list of pyang.statements.Statement):
+            statements that define the data under the node
         parent_keys (dict): If any parent of the target link is an element
             of a list, its key is added to this dict by item name
         own_keys: list of keys for the target node
@@ -118,8 +120,8 @@ class EntryPoint(object):
         """Copy the entry-point avoiding overriding it."""
 
         payload = self.payload and (
-            self.payload.unwrap().copy()
-            if isinstance(self.payload, StatementWrapper)
+            self.payload.invoke('copy')
+            if isinstance(self.payload, ListWrapper)
             else self.payload.copy()
         )
 
@@ -146,8 +148,7 @@ class Scanner(object):
     to support it.
     """
 
-    def __init__(self, builder, key_template,
-                 name_composer, key_name=None, value_arg='value'):
+    def __init__(self, builder, key_template, name_composer, key_name=None):
         """Initialize the scanner object.
 
         Arguments:
@@ -165,19 +166,6 @@ class Scanner(object):
                 name from a list of other names. It is mainly used to compose
                 the default key name for the parent nodes,
                 e.g. ``['user', 'id'] -> 'user-id'``.
-            value_arg (str): When a entry is produced for a value in a
-                leaf-list, it is necessary to transform the plain data node
-                in a complex container, in order to introduce the implicit key.
-                This argument is used to create a new leaf that will store the
-                data value. For example, consider the data node
-                ``leaf-list usernames { type string; }``, the produced entry
-                for an ``value_arg = 'value'`` and the default ``key_template``
-                is::
-
-                    container username {
-                        leaf id { type int32; }
-                        leaf value { type string; }
-                    }
 
         Returns:
             list: :class:`EntryPoint` elements.
@@ -186,7 +174,6 @@ class Scanner(object):
         self.builder = builder
         self.key_name = key_name
         self.name_composer = name_composer
-        self.value_arg = value_arg
 
     def default_key(self):
         """Render the default key template into a Statement"""
@@ -195,24 +182,20 @@ class Scanner(object):
             key.arg = self.key_name
         return key
 
-    def singularize_list(self, statement, item_name):
+    @staticmethod
+    def _node_as_grouping(statement):
         """Generates a data description for one element of the list."""
-        # singularize node:
-        #   list => container
-        if statement.keyword == 'list':
-            item_node = statement.copy()
-            item_node.keyword = 'container'
-            item_node.raw_keyword = 'container'
-            item_node.arg = item_name
-            item_node = self.builder(item_node)
-        else:  # leaf-list
-            # singularize node:
-            #   leaf-list => container with "leaf value" inside
-            item_node = self.builder.container(item_name)
-            value = item_node.leaf(self.value_arg)
-            value.append(*statement.substmts, copy=True)
+        if is_plain(statement):
+            return ListWrapper([statement])
 
-        return item_node
+        if is_leaf_list(statement):
+            new = statement.copy()
+            new.keyword = 'leaf'
+            new.raw_keyword = 'leaf'
+            return ListWrapper([new])
+
+        # list, container => [children]
+        return ListWrapper(statement.substmts)
 
     def scan_list(self, statement, read_only):
         """Scans a list looking for entry-points"""
@@ -230,7 +213,7 @@ class Scanner(object):
 
         # items should be included
         if atomic_item or include_item:
-            payload = self.singularize_list(statement, item_name)
+            payload = self._node_as_grouping(statement)
             if not key_nodes:
                 # add the default key in the data structure itself
                 payload.append(keys[0])
@@ -280,7 +263,7 @@ class Scanner(object):
         read_only = is_read_only(statement)
         accessor_path = [statement.arg]
         entry = EntryPoint(
-            accessor_path, payload=statement,
+            accessor_path, payload=self._node_as_grouping(statement),
             operations=(READ_ONLY_OPS if read_only else DEFAULT_OPS),
         )
 
