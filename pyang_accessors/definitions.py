@@ -74,3 +74,8 @@ adds ``add`` and ``remove`` operations.
 
 See :data:`INCLUDE`.
 """
+
+ITEM_NAME = 'item-name'
+"""Name for an item of a list.
+The default behavior is assume the singularized list name.
+"""

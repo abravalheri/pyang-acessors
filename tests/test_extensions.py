@@ -64,6 +64,11 @@ def list_example(ctx, module_dir):
                 leaf email { type string; }
                 accessor:modifier atomic;
             }
+
+            leaf-list rooms {
+                type string;
+                accessor:item-name "room-name";
+            }
         }
         """
     with open(join(module_dir, 'list-example.yang'), 'w') as fp:
@@ -158,3 +163,16 @@ def test_atomic_for_container(rpc_module):
     assert rpc_module.find('rpc', 'get-admin')
     assert not rpc_module.find('rpc', 'get-admin-email')
     assert not rpc_module.find('rpc', 'set-admin-email')
+
+
+def test_item_name_override_name(rpc_module):
+    """
+    should use the item-name
+    should not use the argument
+    """
+    assert rpc_module.find('grouping', 'room-name-response')
+    assert rpc_module.find('rpc', 'set-room-name')
+    assert rpc_module.find('rpc', 'get-room-name')
+    assert not rpc_module.find('grouping', 'room-response')
+    assert not rpc_module.find('rpc', 'get-room')
+    assert not rpc_module.find('rpc', 'set-room')

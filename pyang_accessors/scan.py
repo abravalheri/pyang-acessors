@@ -12,19 +12,18 @@ from pyangext.utils import find, select
 from .definitions import (  # constants and identifiers
     CHANGE_OP,
     ITEM_ADD_OP,
+    ITEM_NAME,
     ITEM_REMOVE_OP,
     READ_OP
 )
 from .predicates import (
     is_atomic,
     is_atomic_item,
-    is_container,
     is_data,
     is_included,
     is_included_item,
     is_leaf_list,
     is_list,
-    is_plain,
     is_read_only,
     is_top_level
 )
@@ -63,8 +62,9 @@ def find_item_name(statement):
     """Discover the singular name of the item in list."""
     # should not include name of the list, use instead the name
     # of the item
-    item_name = find(statement, 'item-name')
+    item_name = find(statement, ITEM_NAME, ignore_prefix=True)
     if item_name:
+        print item_name[0].arg
         return item_name[0].arg
 
     return singularize(statement.arg)
@@ -80,7 +80,7 @@ class EntryPoint(object):
         path (list): names of nodes the tree, ordered from root to target
         operations (list): list with names of operations.
             See :module:`pyang_accessors.definitions`
-        payload (list of pyang.statements.Statement):
+        payload (pyang.statements.Statement or list):
             statements that define the data under the node
         parent_keys (dict): If any parent of the target link is an element
             of a list, its key is added to this dict by item name
@@ -149,7 +149,8 @@ class Scanner(object):
     to support it.
     """
 
-    def __init__(self, builder, key_template, name_composer, key_name=None):
+    def __init__(self, builder, key_template,
+                 name_composer, key_name=None, value_arg='value'):
         """Initialize the scanner object.
 
         Arguments:
@@ -167,6 +168,19 @@ class Scanner(object):
                 name from a list of other names. It is mainly used to compose
                 the default key name for the parent nodes,
                 e.g. ``['user', 'id'] -> 'user-id'``.
+            value_arg (str): When a entry is produced for a value in a
+                leaf-list, it is necessary to transform the plain data node
+                in a complex container, in order to introduce the implicit key.
+                This argument is used to create a new leaf that will store the
+                data value. For example, consider the data node
+                ``leaf-list usernames { type string; }``, the produced entry
+                for an ``value_arg = 'value'`` and the default ``key_template``
+                is::
+
+                    container username {
+                        leaf id { type int32; }
+                        leaf value { type string; }
+                    }
 
         Returns:
             list: :class:`EntryPoint` elements.
@@ -175,6 +189,7 @@ class Scanner(object):
         self.builder = builder
         self.key_name = key_name
         self.name_composer = name_composer
+        self.value_arg = value_arg
 
     def default_key(self):
         """Render the default key template into a Statement"""
@@ -183,20 +198,24 @@ class Scanner(object):
             key.arg = self.key_name
         return key
 
-    @staticmethod
-    def _node_as_grouping(statement):
+    def singularize_list(self, statement, item_name):
         """Generates a data description for one element of the list."""
-        if is_plain(statement):
-            return ListWrapper([statement])
-
         if is_leaf_list(statement):
-            new = statement.copy()
-            new.keyword = 'leaf'
-            new.raw_keyword = 'leaf'
-            return ListWrapper([new])
+            # singularize node:
+            #   leaf-list => container with "leaf value" inside
+            item_node = self.builder.container(item_name)
+            value = item_node.leaf(self.value_arg)
+            value.append(*statement.substmts, copy=True)
+        else:
+            # singularize node:
+            #   list => container
+            item_node = statement.copy()
+            item_node.keyword = 'container'
+            item_node.raw_keyword = 'container'
+            item_node.arg = item_name
+            item_node = self.builder(item_node)
 
-        # list, container => [children]
-        return ListWrapper(statement.substmts)
+        return item_node
 
     def scan_list(self, statement, read_only):
         """Scans a list looking for entry-points"""
@@ -214,7 +233,7 @@ class Scanner(object):
 
         # items should be included
         if atomic_item or include_item:
-            payload = self._node_as_grouping(statement)
+            payload = self.singularize_list(statement, item_name)
             if not key_nodes:
                 # add the default key in the data structure itself
                 payload.append(keys[0])
@@ -268,9 +287,6 @@ class Scanner(object):
             operations=(READ_ONLY_OPS if read_only else DEFAULT_OPS),
         )
 
-        if is_container(statement):
-            entry.payload = self._node_as_grouping(statement)
-
         # atomic nodes (leaf, anyxml or with `atomic` annotation)
         # should be retrieved/modified as an entire entity
         # no need to dive in tree
@@ -304,8 +320,18 @@ class Scanner(object):
                 if read_only:
                     entry.operations = READ_ONLY_OPS
                 if keys:
-                    # relate a key with the last node name
-                    entry.parent_keys[accessor_path[-1]] = keys
+                    parent_name = accessor_path[-1]
+                    node_name = entry.path[-1]
+                    key_names = [key.arg for key in keys]
+                    # keys cannot be changed
+                    # and there is no sense in reading it, because they are
+                    # necessary to do this operation
+                    # therefore, skip keys
+                    if node_name in key_names:
+                        continue
+
+                    # relate keys with the last node name
+                    entry.parent_keys[parent_name] = keys
 
                 # prefix path with the parent path
                 entry.path = accessor_path + entry.path

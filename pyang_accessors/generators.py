@@ -172,6 +172,7 @@ class RPCGenerator(object):
             '----------------------------------------------------------'
         ),
         'description_template': 'Accessors interface for module: `{}`.',
+        'value_arg': 'value',
     }
     """Default configuration for the generator.
 
@@ -486,7 +487,8 @@ class RPCGenerator(object):
                                                          namespace, keyword)
 
         scanner = Scanner(
-            builder, self.key_template, self.name_composer, self.key_suffix)
+            builder, self.key_template,
+            self.name_composer, self.key_suffix, self.value_arg)
 
         entries = scanner.scan(module)
         if not entries:

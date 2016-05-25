@@ -102,3 +102,13 @@ def test_id_group_include_explicity_keys(rpc_module):
     assert id_group
     assert id_group.find('leaf', 'company')
     assert id_group.find('leaf', 'login')
+
+
+def test_cannot_access_keys(rpc_module):
+    """
+    should not change keys
+    should not read keys (since keys are needed to the access)
+    """
+    assert not rpc_module.find('rpc', 'get-domain-url')
+    assert not rpc_module.find('rpc', 'set-domain-url')
+    assert not rpc_module.find('grouping', 'domain-url-data')
