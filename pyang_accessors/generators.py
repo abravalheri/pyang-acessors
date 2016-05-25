@@ -133,11 +133,13 @@ class RPCGenerator(object):
     DEFAULT_CONFIG = {
         'key_suffix': 'id',
         'data_suffix': 'data',
-        'data_and_key_suffix': 'request',
         'identification_suffix': 'identification',
+        'self_identification_suffix': 'self-identification',
+        'request_suffix': 'request',
         'response_suffix': 'response',
         'suffix': 'interface',
         'default_response_name': 'default-response',
+        'default_key_group_name': 'default-identification',
         'choice_name': 'response',
         'success_name': 'success',
         'success_children_template': [
@@ -192,6 +194,10 @@ class RPCGenerator(object):
         # set properties from kwargs or default
         for prop, default in self.DEFAULT_CONFIG.items():
             setattr(self, prop, kwargs.get(prop) or default)
+
+    def _just_default_key(self, keys):
+        """Identify if the entry has just the default key."""
+        return keys and len(keys) == 1 and keys[0].arg == self.key_suffix
 
     def _prefix_keys(self, keys, prefix):
         """Compose the key name with a prefix"""
@@ -297,33 +303,30 @@ class RPCGenerator(object):
 
         return (out, builder)
 
-    def _create_response_choice(self, parent, success_children=None):
-        """Creates a ``choice`` node under a parent node.
+    def _response_choice(self, success_grouping_name):
+        """\
+        Tuple representation for ``choice`` node that includes a failure case.
 
         The ``choice`` node means just one child can exist at each time.
         In this case, the choice statement is used to impose the response
         status: **or there was a failure with the RPC, or it was successful**.
 
         Arguments:
-            parent (pyang_builder.StatementWrapper):
-                Node below which the ``choice`` will be placed.
-            success_children (list): list of data nodes that corresponds
-                to the RPC response. If no list is provided, the default
-                behavior is to have an ``ok`` leaf.
+            success_grouping_name (str):
+                Name of the grouping containing the data nodes that
+                correspond to the RPC response.
         """
-        choice = parent.choice(self.choice_name)
-
-        choice.default(self.success_name)
-        case = choice.case(self.success_name)
-        if success_children:
-            case.append(*success_children)
-        else:
-            case.uses(self.success_name)
-
-        failure = choice.case(self.failure_name)
-        failure.uses(self.failure_name)
-
-        return choice
+        return (
+            ('choice', self.choice_name, [
+                ('default', self.success_name),
+                ('case', self.success_name, [
+                    ('uses', success_grouping_name),
+                ]),
+                ('case', self.failure_name, [
+                    ('uses', self.failure_name),
+                ]),
+            ])
+        )
 
     def _define_id_grouping(self, entry):
         """Define an ID Grouping.
@@ -354,6 +357,9 @@ class RPCGenerator(object):
         The last key should not be prefixed, but the predecessors should,
         in order to guarantee uniqueness.
 
+        If the onlye key is the default key, the group name should be
+        "default" + identification_prefix.
+
         .. note:: This method do not actually create the complete ``grouping``
             just returns its name and content
 
@@ -381,18 +387,19 @@ class RPCGenerator(object):
 
         # truncate the path before the last keyed item
         predecessor_names = []
+        predecessor_keys = []
         for name in path:
             if name == target:
                 break
             predecessor_names.append(name)
+            keys = parent_keys.get(name)
+            if keys:
+                # predecessor keys should be prefixed in order to
+                # guarantee uniqueness
+                predecessor_keys.extend(self._prefix_keys(keys, name))
 
-        # predecessor keys should be prefixed in order to
-        # guarantee uniqueness
-        predecessor_keys = []
-        for (name, keys) in parent_keys.items():
-            if name in predecessor_names:
-                keys = self._prefix_keys(keys, name)
-            predecessor_keys.extend(keys)
+        if self._just_default_key(target_keys) and not predecessor_keys:
+            return (self.default_key_group_name, target_keys)
 
         group_name = self.name_composer(
             predecessor_names + [target, self.identification_suffix])
@@ -498,9 +505,8 @@ class RPCGenerator(object):
 
         # Default dumb success nodes are also required, because CHANGE
         # operations return it
-        success_name = self.default_response_name
+        success_name = self.success_name
         success_content = self.success_children_template
-
 
         for entry in scanner.scan(module):
             # The ID Grouping is used by READ and ITEM_REMOVE operations
@@ -520,6 +526,9 @@ class RPCGenerator(object):
             parent_id_group = None
             parent_id_content = None
             if entry.parent_keys:
+                # _define_id_grouping will take the last keyed item in
+                # the path as target. If own_keys are None, the last
+                # keyed item is the parent item
                 fake_entry = entry.copy()
                 fake_entry.own_keys = None
 
@@ -527,10 +536,12 @@ class RPCGenerator(object):
                     self._define_id_grouping(fake_entry)
                 )
 
-                # data_and_id_group = compose(
-                #     entry.path + [self.data_and_key_suffix])
-
-                # data_and_id = parent_keys + [builder.uses(data_group)]
+            # ITEM_ADD operation returns just the keys for the node
+            # the parent keys ares already included in request
+            own_id_group = self.default_key_group_name
+            if not self._just_default_key(entry.own_keys):
+                own_id_group = compose(
+                    entry.path + [self.self_identification_suffix])
 
             for operation in entry.operations:
                 # ================ =================== ==================
@@ -539,7 +550,7 @@ class RPCGenerator(object):
                 # READ             parent + own keys   error || data
                 # CHANGE           parent keys + data  error || success
                 # ITEM_ADD         parent keys + data  error || own keys
-                # ITEM_REMOVE      keys                error || data
+                # ITEM_REMOVE      parent + own keys   error || data
                 # ================ =================== ==================
 
                 rpc_name = compose([operation] + entry.path)
@@ -554,42 +565,69 @@ class RPCGenerator(object):
                     request_name = id_group
                     request_content = keys
                     # Responds with data
-                    response_name = (
+                    response_choice_name = (
                         compose(entry.path + [self.response_suffix]))
-                    self._create_and_append_grouping(
-                        out, data_group, entry.payload, already_created)
-                    response_content = [builder.uses(data_group)]
+                    response_name = data_group
+                    response_content = entry.payload
                 else:  # CHANGE_OP, ITEM_ADD_OP
                     # CHANGE/ADD request may specify parent + own keys and
                     # must specify data.
                     # own keys are already present in the payload (data_group)
-                    request_name = parent_id_group or data_group
-                    request_content = parent_id_content or entry.payload
+                    if parent_id_group:
+                        self._create_and_append_grouping(
+                            out,
+                            parent_id_group,
+                            parent_id_content,
+                            already_created)
+                        self._create_and_append_grouping(
+                            out,
+                            data_group,
+                            entry.payload,
+                            already_created)
+                        request_name = (
+                            compose(entry.path + [self.request_suffix]))
+                        request_content = [
+                            ('uses', parent_id_group),
+                            ('uses', data_group),
+                        ]
+                    else:
+                        request_name = data_group
+                        request_content = entry.payload
 
                 if operation == CHANGE_OP:
                     # CHANGE request does not respond anything
                     # (except occasional error)
+                    response_choice_name = self.default_response_name
                     response_name = success_name
                     response_content = success_content
                 elif operation == ITEM_ADD_OP:
                     # ADD request responds with own keys
-                    response_name = compose([rpc_name, self.response_suffix])
-                    response_content = (
-                        [builder.uses(id_group)] if not parent_id_content
-                        else entry.own_keys
-                    )
-
-                # self._create_response_choice()
+                    response_choice_name = compose(
+                        [rpc_name, self.response_suffix])
+                    if not parent_id_content:
+                        response_name = id_group
+                        response_content = keys
+                    else:
+                        response_name = own_id_group
+                        response_content = entry.own_keys
 
                 self._create_and_append_grouping(
-                        out, request_name, request_content, already_created)
+                    out, failure_name, failure_content, already_created)
+
                 self._create_and_append_grouping(
-                        out, response_name, response_content, already_created)
+                    out, request_name, request_content, already_created)
+                self._create_and_append_grouping(
+                    out, response_name, response_content, already_created)
+
+                self._create_and_append_grouping(
+                    out, response_choice_name,
+                    self._response_choice(response_name),
+                    already_created)
+
                 rpc = out.rpc(rpc_name)
                 if request_name:
                     rpc.input().uses(request_name)
-                if response_name:
-                    rpc.output().uses(response_name)
+                rpc.output().uses(response_choice_name)
 
         registry = ImportRegistry()
         normalize = Normalizer(self.ctx, registry)

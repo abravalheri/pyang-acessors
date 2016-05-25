@@ -48,9 +48,8 @@ def list_example(ctx, module_dir):
                 leaf login { type string; }
                 leaf name { type string; }
                 leaf surname { type string; }
+                leaf-list phone { type string; }
             }
-
-            leaf-list slogans { type string; }
         }
         """
     with open(join(module_dir, 'list-example.yang'), 'w') as fp:
@@ -69,14 +68,33 @@ def rpc_module(generator, list_example):
     return generator.transform(list_example)
 
 
-def test_create_id_group_for_implicity_key(rpc_module):
+def test_create_default_id_group_for_implicity_key(rpc_module):
     """
-    should create a grouping named (list-item name + id-prefix)
+    should create a default id grouping for (leaf-)lists with implicit keys
     should have an ID leaf inside this group
     """
     id_group = rpc_module.find('grouping', 'default-identification')
     assert id_group
     assert id_group.find('leaf', 'id')
+
+
+# def test_insert_default_id_if_node_is_target(rpc_module):
+#     """
+#     should insert a default key in the node data
+#     """
+#     print rpc_module.dump()
+#     node = rpc_module.find('grouping', 'user-phone-data')
+#     assert node
+#     assert node.find('leaf', 'id')
+
+
+# def test_create_value_for_leaf_list(rpc_module):
+#     """
+#     should insert a default key in the node data
+#     """
+#     node = rpc_module.find('grouping', 'user-phone-data')
+#     assert node
+#     assert node.find('leaf', 'value')
 
 
 def test_id_group_include_explicity_keys(rpc_module):

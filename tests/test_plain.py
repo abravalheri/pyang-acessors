@@ -101,7 +101,7 @@ def test_consider_leaf_list_atomic_item(rpc_module):
         assert rpc
         # get needs an ID to find the correct entry
         input_ = rpc.find('input')[0]
-        assert input_.find('uses', leaf_name+'-identification')
+        assert input_.find('uses', 'default-identification')
 
 
 def test_generate_failure_condition(rpc_module):
@@ -165,6 +165,7 @@ def test_valid_yang(rpc_module, ctx):
     """
     module produced by transformation should be valid
     """
+    print rpc_module.dump()
     assert rpc_module.validate(ctx)
     assert hasattr(rpc_module, 'i_children')
     assert rpc_module.i_children
