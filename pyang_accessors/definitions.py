@@ -41,7 +41,7 @@ an indivisible entity.
 entity at once.
 """
 
-ATOMIC_ITEM = 'atomic_item'
+ATOMIC_ITEM = 'atomic-item'
 """Value for ``pyang-accessor`` YANG modifier keyword.
 
 Similar to `atomic`, but consider each item of a list
@@ -65,7 +65,7 @@ the entire leaf-list, list or container node.
 With this annotation, sub-nodes can still be accessed individually.
 """
 
-INCLUDE_ITEM = 'include_item'
+INCLUDE_ITEM = 'include-item'
 """Value for ``pyang-accessor`` YANG modifier keyword.
 
 Similar to ``include``, but consider each item of a list

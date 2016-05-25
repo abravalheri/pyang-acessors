@@ -18,6 +18,7 @@ from .definitions import (  # constants and identifiers
 from .predicates import (
     is_atomic,
     is_atomic_item,
+    is_container,
     is_data,
     is_included,
     is_included_item,
@@ -263,9 +264,12 @@ class Scanner(object):
         read_only = is_read_only(statement)
         accessor_path = [statement.arg]
         entry = EntryPoint(
-            accessor_path, payload=self._node_as_grouping(statement),
+            accessor_path, payload=statement,
             operations=(READ_ONLY_OPS if read_only else DEFAULT_OPS),
         )
+
+        if is_container(statement):
+            entry.payload = self._node_as_grouping(statement)
 
         # atomic nodes (leaf, anyxml or with `atomic` annotation)
         # should be retrieved/modified as an entire entity

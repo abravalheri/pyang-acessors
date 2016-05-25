@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=redefined-outer-name
 """
-Tests for YANG modules without complex structures, just simple leafs
+Tests for YANG modules with lists
 """
 from os.path import join
 
@@ -34,6 +34,7 @@ def list_example(ctx, module_dir):
 
             list companies {
                 leaf name { type string; }
+                leaf-list addresses { type string; }
             }
 
             list domains {
@@ -78,23 +79,14 @@ def test_create_default_id_group_for_implicity_key(rpc_module):
     assert id_group.find('leaf', 'id')
 
 
-# def test_insert_default_id_if_node_is_target(rpc_module):
-#     """
-#     should insert a default key in the node data
-#     """
-#     print rpc_module.dump()
-#     node = rpc_module.find('grouping', 'user-phone-data')
-#     assert node
-#     assert node.find('leaf', 'id')
-
-
-# def test_create_value_for_leaf_list(rpc_module):
-#     """
-#     should insert a default key in the node data
-#     """
-#     node = rpc_module.find('grouping', 'user-phone-data')
-#     assert node
-#     assert node.find('leaf', 'value')
+def test_insert_prefixed_default_id_if_node_is_parent(rpc_module):
+    """
+    should insert a default key in the node data
+    """
+    node = rpc_module.find('grouping', 'company-address-identification')
+    assert node
+    assert node.find('leaf', 'id')  # => Address
+    assert node.find('leaf', 'company-id')
 
 
 def test_id_group_include_explicity_keys(rpc_module):

@@ -204,7 +204,7 @@ class RPCGenerator(object):
         for key in keys:
             new = key.copy()
             new.arg = self.name_composer([prefix, key.arg])
-            prefixed.append(key)
+            prefixed.append(new)
 
         return prefixed
 
