@@ -52,7 +52,12 @@ stderr
 stdout
 str
 substmts
+sys
 todo
+tuple
+tuples
+typedef
+typedefs
 unicode
 unprefixed
 URL
