@@ -47,9 +47,11 @@ class Normalizer(object):
         """
         # 1st: split attr in (current prefix, attr unprefixed name)
         (prefix, value) = qualify_str(getattr(node, attr))
+
         # 2nd: find module name and revision
         (name, revision) = prefix_to_modulename_and_revision(
-            node.i_module, prefix, node.pos, self.ctx.errors)
+            getattr(node, 'i_orig_module', node.i_module),
+            prefix, node.pos, self.ctx.errors)
 
         if not prefix:
             prefix = node.i_module.i_prefix

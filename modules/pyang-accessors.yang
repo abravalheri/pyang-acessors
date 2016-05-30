@@ -1,5 +1,5 @@
 module pyang-accessors {
-  namespace "http://cpqd.com.br/ns/generators/pyang-accessors";
+  namespace "http://cpqd.com.br/generators/pyang-accessors";
   prefix "accessor";
 
   organization "Brazilian Center for Research and Development (CPqD)";
@@ -11,7 +11,7 @@ module pyang-accessors {
      authors of the code.  All rights reserved.";
 
   description
-    "Extensions for pyang-accessors generator";
+    "Extensions used by pyang-accessors generator";
 
   revision 2015-05-20 { description "Initial version"; }
 
